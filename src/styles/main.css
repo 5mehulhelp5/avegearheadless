@@ -399,3 +399,7 @@ button.primary:hover {
   margin-top: -3px;
   /* Align with border */
 }
+
+body {
+    background: red;
+}
