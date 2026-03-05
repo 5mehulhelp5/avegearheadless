@@ -1,0 +1,51 @@
+type Query {
+    catalogPriceRules: CatalogPriceRulesOutput @resolver(class: "Ave\\GraphQLRules\\Model\\Resolver\\CatalogPriceRules") @doc(description: "Get active catalog price rules")
+    cartPriceRules: CartPriceRulesOutput @resolver(class: "Ave\\GraphQLRules\\Model\\Resolver\\CartPriceRules") @doc(description: "Get active cart price rules")
+}
+
+type CatalogPriceRulesOutput {
+    items: [CatalogPriceRule!]!
+}
+
+type CatalogPriceRule {
+    rule_id: Int
+    name: String
+    description: String
+    from_date: String
+    to_date: String
+    is_active: Boolean
+    conditions_serialized: String
+    actions_serialized: String
+    stop_rules_processing: Boolean
+    sort_order: Int
+    simple_action: String
+    discount_amount: Float
+}
+
+type CartPriceRulesOutput {
+    items: [CartPriceRule!]!
+}
+
+type CartPriceRule {
+    rule_id: Int
+    name: String
+    description: String
+    from_date: String
+    to_date: String
+    is_active: Boolean
+    conditions_serialized: String
+    actions_serialized: String
+    stop_rules_processing: Boolean
+    sort_order: Int
+    simple_action: String
+    discount_amount: Float
+    discount_qty: Float
+    discount_step: Int
+    apply_to_shipping: Boolean
+    times_used: Int
+    is_rss: Boolean
+    coupon_type: Int
+    use_auto_generation: Boolean
+    uses_per_customer: Int
+    customer_group_ids: String
+}

@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import Header from './components/common/Header';
 import Footer from './components/common/Footer';
 import MiniCart from './components/cart/MiniCart';
+import PromotionsBanner from './components/home/PromotionsBanner';
 
 import Home from './pages/Home';
 import Product from './pages/Product';
@@ -14,6 +15,7 @@ import Search from './pages/Search';
 function App() {
   return (
     <div className="app">
+      <PromotionsBanner />
       <Header />
       <MiniCart />
       <main>

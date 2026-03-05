@@ -8,11 +8,77 @@ import {
     ShieldCheck,
     Minus,
     Plus,
-    ChevronLeft
+    ChevronLeft,
+    Tag,
+    X
 } from 'lucide-react';
+import { gql, useMutation, useQuery } from '@apollo/client';
+
+const APPLY_COUPON = gql`
+  mutation ApplyCoupon($cartId: String!, $couponCode: String!) {
+    applyCouponToCart(input: { cart_id: $cartId, coupon_code: $couponCode }) {
+      cart {
+        id
+        applied_coupons { code }
+        prices {
+          discounts {
+            amount { value }
+            label
+          }
+          grand_total { value }
+        }
+      }
+    }
+  }
+`;
+
+const REMOVE_COUPON = gql`
+  mutation RemoveCoupon($cartId: String!) {
+    removeCouponFromCart(input: { cart_id: $cartId }) {
+      cart {
+        id
+        applied_coupons { code }
+        prices {
+          discounts {
+            amount { value }
+            label
+          }
+          grand_total { value }
+        }
+      }
+    }
+  }
+`;
+
+const GET_CART_TOTALS = gql`
+    query GetCartTotals($cartId: String!) {
+        cart(cart_id: $cartId) {
+            id
+            applied_coupons { code }
+            prices {
+                grand_total { value }
+                discounts {
+                    amount { value }
+                    label
+                }
+            }
+        }
+    }
+`;
 
 const Cart = () => {
-    const { cartItems, removeFromCart, addToCart } = useCart();
+    const { cartItems, removeFromCart, addToCart, cartId } = useCart();
+    const [couponCode, setCouponCode] = React.useState('');
+    const [couponError, setCouponError] = React.useState('');
+
+    const [applyCoupon, { loading: applying }] = useMutation(APPLY_COUPON);
+    const [removeCoupon, { loading: removing }] = useMutation(REMOVE_COUPON);
+
+    const { data: cartData, refetch: refetchCart } = useQuery(GET_CART_TOTALS, {
+        variables: { cartId },
+        skip: !cartId,
+        fetchPolicy: 'network-only' // Ensure we get latest discounts
+    });
 
     const subtotal = cartItems.reduce((acc, item) => {
         const regularPrice = item.product.price_range.minimum_price.regular_price.value;
@@ -21,7 +87,33 @@ const Cart = () => {
         return acc + (currentPrice * item.quantity);
     }, 0);
 
-    const total = subtotal; // Can add tax/shipping logic later if needed
+    const appliedCoupons = cartData?.cart?.applied_coupons || [];
+    const discounts = cartData?.cart?.prices?.discounts || [];
+
+    // If the backend returns a discounted grand_total, use it, otherwise fallback
+    const total = cartData?.cart?.prices?.grand_total?.value || subtotal;
+
+    const handleApplyCoupon = async () => {
+        if (!couponCode.trim()) return;
+        setCouponError('');
+        try {
+            await applyCoupon({ variables: { cartId, couponCode } });
+            setCouponCode('');
+            refetchCart();
+        } catch (err) {
+            setCouponError(err.message || 'Failed to apply coupon.');
+        }
+    };
+
+    const handleRemoveCoupon = async () => {
+        setCouponError('');
+        try {
+            await removeCoupon({ variables: { cartId } });
+            refetchCart();
+        } catch (err) {
+            setCouponError(err.message || 'Failed to remove coupon.');
+        }
+    };
 
     if (cartItems.length === 0) {
         return (
@@ -154,10 +246,60 @@ const Cart = () => {
                                     <span style={{ fontWeight: '700', color: '#1a1a1a' }}>$0.00</span>
                                 </div>
 
-                                <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '2px dashed #eee', display: 'flex', justifyContent: 'space-between' }}>
+                                {discounts.length > 0 && discounts.map((discount, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', color: '#00a651', fontWeight: 'bold' }}>
+                                        <span>Discount ({discount.label})</span>
+                                        <span>-${discount.amount.value.toFixed(2)}</span>
+                                    </div>
+                                ))}
+
+                                <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '2px dashed #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span style={{ fontSize: '1.1rem', fontWeight: '700' }}>Order Total</span>
                                     <span style={{ fontSize: '1.5rem', fontWeight: '900', color: 'var(--primary-color)' }}>${total.toFixed(2)}</span>
                                 </div>
+                            </div>
+
+                            {/* Coupon Code Section */}
+                            <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid #f0f0f0' }}>
+                                <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '1rem' }}>
+                                    <Tag size={16} /> Have a promotional code?
+                                </h4>
+
+                                {appliedCoupons.length > 0 ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fff4', padding: '12px', border: '1px solid #c6f6d5', borderRadius: '8px' }}>
+                                        <div style={{ color: '#00a651', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Tag size={14} /> {appliedCoupons[0].code}
+                                        </div>
+                                        <button
+                                            onClick={handleRemoveCoupon}
+                                            disabled={removing}
+                                            style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                            title="Remove Coupon"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <input
+                                                type="text"
+                                                placeholder="Enter coupon code"
+                                                value={couponCode}
+                                                onChange={(e) => setCouponCode(e.target.value)}
+                                                style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #e0e0e0', fontSize: '14px' }}
+                                            />
+                                            <button
+                                                onClick={handleApplyCoupon}
+                                                disabled={applying || !couponCode.trim()}
+                                                style={{ padding: '0 20px', borderRadius: '8px', background: '#1a1a1a', color: 'white', border: 'none', fontWeight: 'bold', cursor: 'pointer', opacity: (applying || !couponCode.trim()) ? 0.7 : 1 }}
+                                            >
+                                                Apply
+                                            </button>
+                                        </div>
+                                        {couponError && <div style={{ color: '#d32f2f', fontSize: '12px', marginTop: '8px' }}>{couponError}</div>}
+                                    </>
+                                )}
                             </div>
 
                             <Link

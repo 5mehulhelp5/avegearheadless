@@ -10,9 +10,63 @@ import {
     ChevronRight,
     ChevronLeft,
     ShieldCheck,
-    ShoppingBag
+    ShoppingBag,
+    Tag,
+    X
 } from 'lucide-react';
-import { gql, useMutation, useApolloClient } from '@apollo/client';
+import { gql, useMutation, useQuery, useApolloClient } from '@apollo/client';
+
+const APPLY_COUPON = gql`
+  mutation ApplyCoupon($cartId: String!, $couponCode: String!) {
+    applyCouponToCart(input: { cart_id: $cartId, coupon_code: $couponCode }) {
+      cart {
+        id
+        applied_coupons { code }
+        prices {
+          discounts {
+            amount { value }
+            label
+          }
+          grand_total { value }
+        }
+      }
+    }
+  }
+`;
+
+const REMOVE_COUPON = gql`
+  mutation RemoveCoupon($cartId: String!) {
+    removeCouponFromCart(input: { cart_id: $cartId }) {
+      cart {
+        id
+        applied_coupons { code }
+        prices {
+          discounts {
+            amount { value }
+            label
+          }
+          grand_total { value }
+        }
+      }
+    }
+  }
+`;
+
+const GET_CART_TOTALS = gql`
+    query GetCartTotals($cartId: String!) {
+        cart(cart_id: $cartId) {
+            id
+            applied_coupons { code }
+            prices {
+                grand_total { value }
+                discounts {
+                    amount { value }
+                    label
+                }
+            }
+        }
+    }
+`;
 
 const SET_GUEST_EMAIL_ON_CART = gql`
     mutation SetGuestEmail($cartId: String!, $email: String!) {
@@ -120,15 +174,57 @@ const Checkout = () => {
 
     const client = useApolloClient();
 
+    const [couponCode, setCouponCode] = useState('');
+    const [couponError, setCouponError] = useState('');
+
+    const [applyCoupon, { loading: applyingCoupon }] = useMutation(APPLY_COUPON);
+    const [removeCoupon, { loading: removingCoupon }] = useMutation(REMOVE_COUPON);
+
+    const { data: cartData, refetch: refetchCart } = useQuery(GET_CART_TOTALS, {
+        variables: { cartId },
+        skip: !cartId,
+        fetchPolicy: 'network-only' // Ensure we get latest discounts
+    });
+
     const subtotal = cartItems.reduce((acc, item) => {
         const regularPrice = item.product.price_range.minimum_price.regular_price.value;
         const finalPriceNode = item.product.price_range.minimum_price.final_price;
         const currentPrice = (finalPriceNode && finalPriceNode.value < regularPrice) ? finalPriceNode.value : regularPrice;
         return acc + (currentPrice * item.quantity);
     }, 0);
+
     // Flat Rate is usually flatrate_flatrate in Magento
     const shippingCost = step >= 2 ? (form.shippingMethod === 'express' ? 15.00 : 5.00) : 0;
-    const total = subtotal + shippingCost;
+
+    const appliedCoupons = cartData?.cart?.applied_coupons || [];
+    const discounts = cartData?.cart?.prices?.discounts || [];
+
+    // Determine the base "cart total" from the backend (which includes item discounts & coupons but NOT our custom shipping yet)
+    // If the backend returns a discounted grand_total, use it as a subtotal-like base, otherwise fallback to our calculated subtotal
+    const cartGrandTotal = cartData?.cart?.prices?.grand_total?.value || subtotal;
+    const total = cartGrandTotal + shippingCost;
+
+    const handleApplyCoupon = async () => {
+        if (!couponCode.trim()) return;
+        setCouponError('');
+        try {
+            await applyCoupon({ variables: { cartId, couponCode } });
+            setCouponCode('');
+            refetchCart();
+        } catch (err) {
+            setCouponError(err.message || 'Failed to apply coupon.');
+        }
+    };
+
+    const handleRemoveCoupon = async () => {
+        setCouponError('');
+        try {
+            await removeCoupon({ variables: { cartId } });
+            refetchCart();
+        } catch (err) {
+            setCouponError(err.message || 'Failed to remove coupon.');
+        }
+    };
 
     const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
     const [placing, setPlacing] = useState(false);
@@ -342,10 +438,61 @@ const Checkout = () => {
                     <span>Shipping</span>
                     <span>{shippingCost > 0 ? `$${shippingCost.toFixed(2)}` : 'Calculated next'}</span>
                 </div>
+
+                {discounts.length > 0 && discounts.map((discount, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', color: '#00a651', fontWeight: 'bold', marginTop: '10px' }}>
+                        <span>Discount ({discount.label})</span>
+                        <span>-${discount.amount.value.toFixed(2)}</span>
+                    </div>
+                ))}
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', paddingTop: '20px', borderTop: '2px solid #eee', fontWeight: '800', fontSize: '1.2rem', color: '#000' }}>
                     <span>Total</span>
                     <span>${total.toFixed(2)}</span>
                 </div>
+            </div>
+
+            {/* Coupon Code Section */}
+            <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #f0f0f0' }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '0.9rem' }}>
+                    <Tag size={14} /> Promotional Code
+                </h4>
+
+                {appliedCoupons.length > 0 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fff4', padding: '10px', border: '1px solid #c6f6d5', borderRadius: '6px' }}>
+                        <div style={{ color: '#00a651', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Tag size={12} /> {appliedCoupons[0].code}
+                        </div>
+                        <button
+                            onClick={handleRemoveCoupon}
+                            disabled={removingCoupon}
+                            style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                            title="Remove Coupon"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <input
+                                type="text"
+                                placeholder="Enter coupon text"
+                                value={couponCode}
+                                onChange={(e) => setCouponCode(e.target.value)}
+                                style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #e0e0e0', fontSize: '13px' }}
+                            />
+                            <button
+                                onClick={handleApplyCoupon}
+                                disabled={applyingCoupon || !couponCode.trim()}
+                                style={{ padding: '0 15px', borderRadius: '6px', background: '#1a1a1a', color: 'white', border: 'none', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', opacity: (applyingCoupon || !couponCode.trim()) ? 0.7 : 1 }}
+                            >
+                                Apply
+                            </button>
+                        </div>
+                        {couponError && <div style={{ color: '#d32f2f', fontSize: '11px', marginTop: '6px' }}>{couponError}</div>}
+                    </>
+                )}
             </div>
 
             <div style={{ marginTop: '25px', background: '#f0fff4', padding: '15px', borderRadius: '8px', fontSize: '12px', color: '#00a651', display: 'flex', gap: '10px', alignItems: 'center' }}>

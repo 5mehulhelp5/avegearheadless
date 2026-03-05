@@ -197,3 +197,35 @@ export const GET_CMS_BLOCKS = gql`
     }
   }
 `;
+
+export const GET_CATALOG_PRICE_RULES = gql`
+  query GetCatalogPriceRules {
+    catalogPriceRules {
+      items {
+        rule_id
+        name
+        description
+        is_active
+        discount_amount
+        simple_action
+      }
+    }
+  }
+`;
+
+export const GET_CART_PRICE_RULES = gql`
+  query GetCartPriceRules {
+    cartPriceRules {
+      items {
+        rule_id
+        name
+        description
+        is_active
+        discount_amount
+        simple_action
+        coupon_type
+        stop_rules_processing
+      }
+    }
+  }
+`;
