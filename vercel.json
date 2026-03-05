@@ -1,0 +1,16 @@
+{
+    "rewrites": [
+        {
+            "source": "/magento-api/(.*)",
+            "destination": "https://2fc1869dd5.nxcli.io/$1"
+        },
+        {
+            "source": "/graphql",
+            "destination": "https://2fc1869dd5.nxcli.io/graphql"
+        },
+        {
+            "source": "/(.*)",
+            "destination": "/index.html"
+        }
+    ]
+}
