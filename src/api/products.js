@@ -41,6 +41,15 @@ export const GET_PRODUCT_DETAIL = gql`
         description {
           html
         }
+        categories {
+          uid
+          name
+          url_key
+          breadcrumbs {
+            category_uid
+            category_name
+          }
+        }
         ... on ConfigurableProduct {
           configurable_options {
             id
@@ -86,8 +95,8 @@ export const GET_PRODUCT_DETAIL = gql`
 `;
 
 export const GET_CATEGORY_PRODUCTS = gql`
-  query GetCategoryProducts($id: String!, $pageSize: Int = 12, $currentPage: Int = 1, $filter: ProductAttributeFilterInput) {
-    products(filter: $filter, pageSize: $pageSize, currentPage: $currentPage) {
+  query GetCategoryProducts($id: String!, $pageSize: Int = 12, $currentPage: Int = 1, $filter: ProductAttributeFilterInput, $sort: ProductAttributeSortInput) {
+    products(filter: $filter, pageSize: $pageSize, currentPage: $currentPage, sort: $sort) {
       items {
         uid
         sku
@@ -109,6 +118,9 @@ export const GET_CATEGORY_PRODUCTS = gql`
         small_image {
           url
         }
+        short_description {
+          html
+        }
       }
       aggregations {
         attribute_code
@@ -129,6 +141,11 @@ export const GET_CATEGORY_PRODUCTS = gql`
     categoryList(filters: { category_uid: { eq: $id } }) {
         name
         description
+        breadcrumbs {
+            category_uid
+            category_name
+            category_level
+        }
         children {
             uid
             children {

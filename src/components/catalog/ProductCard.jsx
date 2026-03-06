@@ -1,13 +1,16 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../../contexts/CartContext';
+import { useWishlist } from '../../contexts/WishlistContext';
+import { Heart } from 'lucide-react';
 
-const ProductCard = ({ product }) => {
-    const { addToCart, cartItems, loading } = useCart();
+const ProductCard = ({ product, viewMode = 'grid' }) => {
+    const { addToCart, cartItems, loading: cartLoading } = useCart();
+    const { isInWishlist, addToWishlist, removeFromWishlist, getWishlistItemId, loading: wishlistLoading } = useWishlist();
     const { name, price_range, small_image, sku } = product;
 
     // Diagnostic log to catch SKU/Name mismatch
-    console.log(`[ProductCardDebug] Rendering: name="${name}", sku="${sku}"`);
+    console.log(`[ProductCardDebug] Rendering: name="${name}", sku="${sku}", viewMode="${viewMode}"`);
 
     const regularPrice = price_range.minimum_price.regular_price;
     const finalPrice = price_range.minimum_price.final_price;
@@ -19,6 +22,20 @@ const ProductCard = ({ product }) => {
     const cartItem = cartItems.find(item => item.product.sku === sku);
     const inCartQty = cartItem ? cartItem.quantity : 0;
     const isAtLimit = stockQty !== null && inCartQty >= stockQty;
+
+    const inWishlist = isInWishlist(sku);
+    const wishlistItemId = getWishlistItemId(sku);
+    const isProcessing = cartLoading || wishlistLoading;
+
+    const handleWishlistToggle = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (inWishlist) {
+            await removeFromWishlist(wishlistItemId);
+        } else {
+            await addToWishlist(sku);
+        }
+    };
 
     React.useEffect(() => {
         let cancelled = false;
@@ -41,7 +58,7 @@ const ProductCard = ({ product }) => {
     const getStockLabel = () => {
         if (isOutOfStock) return 'Out of Stock';
         if (isAtLimit) return 'Max in Cart';
-        if (typeof stockQty !== 'number') return null; // Don't show numeric label if we don't have the number
+        if (typeof stockQty !== 'number') return null;
 
         if (stockQty === 0) return 'Out of Stock';
         if (stockQty > 0 && stockQty <= 5) return `Only ${stockQty} Left`;
@@ -50,93 +67,180 @@ const ProductCard = ({ product }) => {
 
     const stockLabel = getStockLabel();
 
+    const isList = viewMode === 'list';
+
     return (
         <div className="product-card" style={{
             background: 'white',
-            borderRadius: '12px',
-            padding: '16px',
-            boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
+            borderRadius: '18px',
+            padding: isList ? '25px' : '16px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
             border: '1px solid #f0f0f0',
-            textAlign: 'center',
+            textAlign: isList ? 'left' : 'center',
             display: 'flex',
-            flexDirection: 'column',
+            flexDirection: isList ? 'row' : 'column',
+            gap: isList ? '30px' : '0',
             justifyContent: 'space-between',
             height: '100%',
             position: 'relative',
-            opacity: (isOutOfStock || isAtLimit) ? 0.8 : 1
-        }}>
+            opacity: (isOutOfStock || isAtLimit) ? 0.8 : 1,
+            transition: 'transform 0.3s, box-shadow 0.3s'
+        }}
+            onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-5px)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.12)';
+            }}
+            onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
+            }}
+        >
             {/* Stock Badge */}
             {stockLabel && (
                 <div style={{
                     position: 'absolute',
-                    top: '10px',
-                    right: '10px',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    fontSize: '0.7rem',
-                    fontWeight: 'bold',
+                    top: '15px',
+                    right: '15px',
+                    padding: '4px 10px',
+                    borderRadius: '30px',
+                    fontSize: '0.65rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
                     backgroundColor: (isOutOfStock || isAtLimit || (stockQty !== null && stockQty <= 5)) ? '#ffebee' : '#e8f5e9',
                     color: (isOutOfStock || isAtLimit || (stockQty !== null && stockQty <= 5)) ? '#c62828' : '#2e7d32',
                     zIndex: 1,
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
                 }}>
                     {stockLabel}
                 </div>
             )}
 
-            <Link to={`/product/${sku}`} style={{ display: 'block', marginBottom: '15px' }}>
-                <div style={{ aspectRatio: '1/1', overflow: 'hidden', marginBottom: '15px', borderRadius: '8px' }}>
-                    {small_image?.url ? (
-                        <img
-                            src={small_image.url}
-                            alt={name}
-                            style={{ width: '100%', height: '100%', objectFit: 'contain', transition: 'transform 0.3s' }}
-                            onMouseOver={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                            onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
-                        />
-                    ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#f5f5f5', color: '#ccc' }}>No Image</div>
+            {/* Wishlist Icon */}
+            <button
+                onClick={handleWishlistToggle}
+                style={{
+                    position: 'absolute',
+                    top: '15px',
+                    left: '15px',
+                    background: '#fff',
+                    border: '1px solid #eee',
+                    borderRadius: '50%',
+                    width: '36px',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: inWishlist ? '#ff4d4d' : '#888',
+                    zIndex: 2,
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+                    transition: 'all 0.2s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                title={inWishlist ? "Remove from wishlist" : "Add to wishlist"}
+            >
+                <Heart size={18} fill={inWishlist ? "#ff4d4d" : "none"} strokeWidth={inWishlist ? 0 : 2} />
+            </button>
+
+            <div style={{
+                flex: isList ? '0 0 240px' : 'none',
+                marginBottom: isList ? '0' : '15px'
+            }}>
+                <Link to={`/product/${sku}`} style={{ display: 'block' }}>
+                    <div style={{ aspectRatio: '1/1', overflow: 'hidden', borderRadius: '12px', background: '#fff' }}>
+                        {small_image?.url ? (
+                            <img
+                                src={small_image.url}
+                                alt={name}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                            />
+                        ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#f5f5f5', color: '#ccc' }}>No Image</div>
+                        )}
+                    </div>
+                </Link>
+            </div>
+
+            <div style={{
+                flex: isList ? 1 : 'none',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: isList ? 'center' : 'flex-start'
+            }}>
+                <Link to={`/product/${sku}`} style={{ display: 'block', textDecoration: 'none' }}>
+                    <h3 style={{
+                        fontSize: isList ? '1.2rem' : '0.95rem',
+                        margin: '0 0 12px',
+                        color: '#333',
+                        fontWeight: 700,
+                        lineHeight: '1.4',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: isList ? 2 : 3,
+                        WebkitBoxOrient: 'vertical',
+                        height: isList ? 'auto' : '4.2em',
+                        fontFamily: 'inherit'
+                    }}>{name}</h3>
+
+                    {isList && product.short_description?.html && (
+                        <div style={{
+                            fontSize: '0.9rem',
+                            color: '#666',
+                            margin: '-5px 0 15px',
+                            lineHeight: 1.5,
+                            overflow: 'hidden',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 3,
+                            WebkitBoxOrient: 'vertical',
+                        }}>
+                            {product.short_description.html.replace(/<[^>]*>?/gm, '')}
+                        </div>
                     )}
-                </div>
-                <h3 style={{
-                    fontSize: '0.95rem',
-                    margin: '0 0 8px',
-                    color: '#333',
-                    fontWeight: 600,
-                    lineHeight: '1.4',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    height: '2.8em' // approx 2 lines
-                }}>{name}</h3>
-                <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                    {hasDiscount ? (
-                        <>
-                            <span style={{ textDecoration: 'line-through', color: '#888', fontSize: '0.9rem' }}>
+
+                    <div style={{
+                        fontSize: isList ? '1.4rem' : '1.1rem',
+                        fontWeight: '800',
+                        color: '#111',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: isList ? 'flex-start' : 'center',
+                        gap: '10px',
+                        marginBottom: isList ? '20px' : '15px'
+                    }}>
+                        {hasDiscount ? (
+                            <>
+                                <span style={{ textDecoration: 'line-through', color: '#888', fontSize: '0.8em', fontWeight: 500 }}>
+                                    {regularPrice.currency} {regularPrice.value.toFixed(2)}
+                                </span>
+                                <span style={{ color: 'var(--primary-color)' }}>
+                                    {finalPrice.currency} {finalPrice.value.toFixed(2)}
+                                </span>
+                            </>
+                        ) : (
+                            <span>
                                 {regularPrice.currency} {regularPrice.value.toFixed(2)}
                             </span>
-                            <span style={{ color: '#d32f2f' }}>
-                                {finalPrice.currency} {finalPrice.value.toFixed(2)}
-                            </span>
-                        </>
-                    ) : (
-                        <span>
-                            {regularPrice.currency} {regularPrice.value.toFixed(2)}
-                        </span>
-                    )}
-                </div>
-            </Link>
+                        )}
+                    </div>
+                </Link>
 
-            <button
-                onClick={() => addToCart(product)}
-                className="primary"
-                style={{ width: '100%', marginTop: 'auto' }}
-                disabled={isOutOfStock || isAtLimit || loading}
-            >
-                {loading ? 'Processing...' : (isOutOfStock ? 'Out of Stock' : (isAtLimit ? 'Limit Reached' : 'Add to Cart'))}
-            </button>
+                <button
+                    onClick={() => addToCart(product)}
+                    className="primary"
+                    style={{
+                        width: isList ? 'auto' : '100%',
+                        alignSelf: isList ? 'flex-start' : 'stretch',
+                        marginTop: 'auto',
+                        padding: isList ? '12px 30px' : '10px 20px',
+                        borderRadius: '30px'
+                    }}
+                    disabled={isOutOfStock || isAtLimit || isProcessing}
+                >
+                    {isProcessing ? 'Processing...' : (isOutOfStock ? 'Out of Stock' : (isAtLimit ? 'Limit Reached' : 'Add to Cart'))}
+                </button>
+            </div>
         </div>
     );
 };

@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery } from '@apollo/client';
 import { GET_PRODUCTS } from '../../api/products';
 import { useCart } from '../../contexts/CartContext';
+import ProductSkeleton from '../catalog/ProductSkeleton';
 
 const Hero = () => {
     const { addToCart } = useCart();
@@ -59,7 +60,11 @@ const Hero = () => {
                     margin: '80px auto 0'
                 }}>
                     {loading ? (
-                        <div style={{ gridColumn: '1/-1', padding: '40px' }}>Loading products...</div>
+                        <>
+                            {[1, 2, 3, 4].map((i) => (
+                                <ProductSkeleton key={i} />
+                            ))}
+                        </>
                     ) : products.map((product) => (
                         <div key={product.uid} style={{
                             background: 'rgba(255, 255, 255, 0.9)',
@@ -89,8 +94,13 @@ const Hero = () => {
                                 color: '#666',
                                 marginBottom: '15px',
                                 textAlign: 'center',
-                                height: '2.5em',
-                                overflow: 'hidden'
+                                height: 'auto', // Changed from 3.2em
+                                minHeight: '3.2em', // Maintain alignment
+                                overflow: 'hidden',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 3, // Allow up to 3 lines
+                                WebkitBoxOrient: 'vertical',
+                                lineHeight: '1.2'
                             }}>{product.name}</p>
 
                             <div style={{ margin: '0 0 15px' }}>

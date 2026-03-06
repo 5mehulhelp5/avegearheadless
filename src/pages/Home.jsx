@@ -7,6 +7,9 @@ import Brands from '../components/home/Brands';
 import Features from '../components/home/Features';
 import PromoBanner from '../components/home/PromoBanner';
 import ProductCard from '../components/catalog/ProductCard';
+import ProductSkeleton from '../components/catalog/ProductSkeleton';
+import SEO from '../components/common/SEO';
+
 
 const Home = () => {
     // Fetch products for featured sections
@@ -18,8 +21,20 @@ const Home = () => {
         variables: { search: 'audio', pageSize: 4 } // Search for 'audio' to get trending items
     });
 
+    const SkeletonGrid = () => (
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '24px' }}>
+            {[1, 2, 3, 4].map(i => <ProductSkeleton key={i} />)}
+        </div>
+    );
+
     return (
         <div className="home-page">
+
+            <SEO
+                title="Home"
+                description="AV GEAR - Your premium source for high-fidelity audio equipment and home theater systems."
+                ogType="website"
+            />
             <Hero />
             <CategoryIcons />
             <Brands />
@@ -33,7 +48,7 @@ const Home = () => {
                 </div>
 
                 {promoLoading ? (
-                    <p>Loading inspiration...</p>
+                    <SkeletonGrid />
                 ) : (
                     <div className="grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '24px' }}>
                         {promoData?.products?.items?.map(product => (
@@ -51,7 +66,7 @@ const Home = () => {
                 </div>
 
                 {trendingLoading ? (
-                    <p>Loading trends...</p>
+                    <SkeletonGrid />
                 ) : (
                     <div className="grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '24px' }}>
                         {trendingData?.products?.items?.map(product => (

@@ -1,17 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@apollo/client';
+import { LayoutGrid, List as ListIcon } from 'lucide-react';
 import { GET_CATEGORY_PRODUCTS } from '../api/products';
 import ProductCard from '../components/catalog/ProductCard';
+import { useBreadcrumbs } from '../contexts/BreadcrumbContext';
+import SEO from '../components/common/SEO';
 
 const Category = () => {
     const { id } = useParams();
+    const { setBreadcrumbs } = useBreadcrumbs();
     // Start with just the category filter
     const [activeFilters, setActiveFilters] = useState({});
+    const [expandedGroupId, setExpandedGroupId] = useState('category');
+    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+    const [currentPage, setCurrentPage] = useState(1);
+    const [sort, setSort] = useState({});
+    const [pageSize, setPageSize] = useState(12);
+
+    const toggleGroup = (groupId) => {
+        setExpandedGroupId(prev => prev === groupId ? null : groupId);
+    };
 
     // Construct the full filter object for GraphQL
-    // It must strictly match ProductAttributeFilterInput structure
-    // We default to filtering by the current category ID
     const filterVariables = {
         category_uid: { eq: id || "Mg==" },
         ...activeFilters
@@ -20,17 +31,48 @@ const Category = () => {
     const { loading, error, data } = useQuery(GET_CATEGORY_PRODUCTS, {
         variables: {
             id: id || "Mg==",
-            filter: filterVariables
+            filter: filterVariables,
+            pageSize,
+            currentPage,
+            sort
         },
         fetchPolicy: 'network-only' // Ensure we get fresh aggregations on filter change
     });
 
-    // Reset filters when changing category
+    const categoryName = data?.categoryList?.[0]?.name || 'Category';
+    const totalCount = data?.products?.total_count || 0;
+    const totalPages = data?.products?.page_info?.total_pages || 1;
+
+    // Update breadcrumbs when category data is loaded
+    useEffect(() => {
+        if (data && data.categoryList?.[0]) {
+            const category = data.categoryList[0];
+            const crumbs = [];
+
+            // Add parent categories from breadcrumbs
+            if (category.breadcrumbs) {
+                category.breadcrumbs.forEach(b => {
+                    crumbs.push({ label: b.category_name, path: `/category/${b.category_uid}` });
+                });
+            }
+
+            // Add current category
+            crumbs.push({ label: categoryName, path: `/category/${id}` });
+
+            setBreadcrumbs(crumbs);
+        }
+        return () => setBreadcrumbs([]);
+    }, [data, categoryName, id, setBreadcrumbs]);
+
+    // Reset filters and page when changing category
     useEffect(() => {
         setActiveFilters({});
+        setExpandedGroupId('category');
+        setCurrentPage(1);
     }, [id]);
 
     const handleFilterChange = (attributeCode, value) => {
+        setCurrentPage(1); // Reset to first page on filter change
         setActiveFilters(prev => {
             const newFilters = { ...prev };
 
@@ -54,6 +96,11 @@ const Category = () => {
             }
             return newFilters;
         });
+    };
+
+    const handlePageChange = (page) => {
+        setCurrentPage(page);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     if (loading && !data) return (
@@ -97,7 +144,6 @@ const Category = () => {
 
     const products = data?.products?.items || [];
     const aggregations = data?.products?.aggregations || [];
-    const categoryName = data?.categoryList?.[0]?.name || 'Category';
 
     // We filter out 'category_uid' aggregation usually as it's redundant here, 
     // but useful for subcategories. Let's keep distinct ones.
@@ -105,6 +151,11 @@ const Category = () => {
 
     return (
         <div className="category-page">
+            <SEO
+                title={`${categoryName} | AV GEAR`}
+                description={data?.categoryList?.[0]?.meta_description || `Browse our collection of ${categoryName}.`}
+                ogType="website"
+            />
             <div className="header" style={{ backgroundColor: '#f5f5f5', padding: '40px 0', marginBottom: 'var(--spacing-lg)' }}>
                 <div className="container">
                     <h1 style={{ margin: 0, fontWeight: 300 }}>{categoryName}</h1>
@@ -116,42 +167,60 @@ const Category = () => {
 
                     {/* Sidebar Filters */}
                     <aside className="filters-sidebar">
-                        <div style={{ marginBottom: '20px', paddingBottom: '10px', borderBottom: '1px solid #eee' }}>
-                            <h3 style={{ margin: 0 }}>Filters</h3>
+                        <h2 className="sidebar-shop-by">Shop By</h2>
+
+                        {/* Category Block (Always shown as active in SS) */}
+                        <div className={`filter-block ${expandedGroupId === 'category' ? 'active' : ''}`}>
+                            <div className="filter-block-title" onClick={() => toggleGroup('category')}>
+                                Category <span>{expandedGroupId === 'category' ? '−' : '+'}</span>
+                            </div>
+                            {expandedGroupId === 'category' && (
+                                <div className="filter-item-list">
+                                    <div className="filter-item selected">
+                                        <span>{categoryName}</span>
+                                        <span className="count">({data?.products?.total_count || 0})</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
-                        {visibleAggregations.map(agg => (
-                            <div key={agg.attribute_code} style={{ marginBottom: '30px' }}>
-                                <h4 style={{ textTransform: 'capitalize', marginBottom: '15px' }}>{agg.label}</h4>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                    {agg.options.map(option => {
-                                        let isSelected = false;
-                                        if (agg.attribute_code === 'price') {
-                                            const [f, t] = option.value.split('_');
-                                            isSelected = activeFilters.price?.from === f && activeFilters.price?.to === t;
-                                        } else {
-                                            isSelected = activeFilters[agg.attribute_code]?.eq === option.value;
-                                        }
+                        {visibleAggregations.map(agg => {
+                            const isExpanded = expandedGroupId === agg.attribute_code;
+                            return (
+                                <div key={agg.attribute_code} className={`filter-block ${isExpanded ? 'active' : ''}`}>
+                                    <div className="filter-block-title" onClick={() => toggleGroup(agg.attribute_code)}>
+                                        {agg.label} <span>{isExpanded ? '−' : '+'}</span>
+                                    </div>
+                                    {isExpanded && (
+                                        <div className="filter-item-list">
+                                            {agg.options.map(option => {
+                                                let isSelected = false;
+                                                if (agg.attribute_code === 'price') {
+                                                    const [f, t] = option.value.split('_');
+                                                    isSelected = activeFilters.price?.from === f && activeFilters.price?.to === t;
+                                                } else {
+                                                    isSelected = activeFilters[agg.attribute_code]?.eq === option.value;
+                                                }
 
-                                        return (
-                                            <label key={option.value} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '0.9rem', color: '#555' }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isSelected}
-                                                    onChange={() => handleFilterChange(agg.attribute_code, option.value)}
-                                                    style={{ marginRight: '10px' }}
-                                                />
-                                                <span>{option.label}</span>
-                                                <span style={{ marginLeft: 'auto', color: '#999', fontSize: '0.8rem' }}>({option.count})</span>
-                                            </label>
-                                        );
-                                    })}
+                                                return (
+                                                    <div
+                                                        key={option.value}
+                                                        className={`filter-item ${isSelected ? 'selected' : ''}`}
+                                                        onClick={() => handleFilterChange(agg.attribute_code, option.value)}
+                                                    >
+                                                        <span>{option.label}</span>
+                                                        <span className="count">({option.count})</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
 
                         {visibleAggregations.length === 0 && (
-                            <p style={{ color: '#999' }}>No filters available.</p>
+                            <p style={{ color: '#999', fontSize: '0.8rem', padding: '15px' }}>No additional filters available.</p>
                         )}
                     </aside>
 
@@ -169,14 +238,197 @@ const Category = () => {
                             </div>
                         ) : (
                             <>
-                                <div style={{ marginBottom: '20px', fontSize: '0.9rem', color: '#666' }}>
-                                    {data?.products?.total_count} products found
+                                <div style={{
+                                    marginBottom: '25px',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    borderBottom: '1px solid #eee',
+                                    paddingBottom: '15px'
+                                }}>
+                                    <div style={{ fontSize: '0.9rem', color: '#666', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '20px' }}>
+                                        <span>{totalCount} products found</span>
+
+                                        <select
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setCurrentPage(1);
+                                                if (val === 'price_asc') setSort({ price: 'ASC' });
+                                                else if (val === 'price_desc') setSort({ price: 'DESC' });
+                                                else setSort({});
+                                            }}
+                                            style={{
+                                                padding: '6px 12px',
+                                                borderRadius: '8px',
+                                                border: '1px solid #ddd',
+                                                fontSize: '0.85rem',
+                                                outline: 'none',
+                                                cursor: 'pointer',
+                                                background: '#fff'
+                                            }}
+                                            value={sort.price === 'ASC' ? 'price_asc' : (sort.price === 'DESC' ? 'price_desc' : '')}
+                                        >
+                                            <option value="">Sort By: Relevance</option>
+                                            <option value="price_asc">Price: Low to High</option>
+                                            <option value="price_desc">Price: High to Low</option>
+                                        </select>
+
+                                        <select
+                                            value={pageSize}
+                                            onChange={(e) => {
+                                                setPageSize(parseInt(e.target.value));
+                                                setCurrentPage(1);
+                                            }}
+                                            style={{
+                                                padding: '6px 12px',
+                                                borderRadius: '8px',
+                                                border: '1px solid #ddd',
+                                                fontSize: '0.85rem',
+                                                outline: 'none',
+                                                cursor: 'pointer',
+                                                background: '#fff'
+                                            }}
+                                        >
+                                            <option value="12">Show: 12</option>
+                                            <option value="24">Show: 24</option>
+                                            <option value="36">Show: 36</option>
+                                        </select>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button
+                                            onClick={() => setViewMode('grid')}
+                                            style={{
+                                                background: viewMode === 'grid' ? '#333' : '#fff',
+                                                color: viewMode === 'grid' ? '#fff' : '#333',
+                                                border: '1px solid #ddd',
+                                                padding: '8px',
+                                                borderRadius: '8px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                transition: 'all 0.2s'
+                                            }}
+                                            title="Grid View"
+                                        >
+                                            <LayoutGrid size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => setViewMode('list')}
+                                            style={{
+                                                background: viewMode === 'list' ? '#333' : '#fff',
+                                                color: viewMode === 'list' ? '#fff' : '#333',
+                                                border: '1px solid #ddd',
+                                                padding: '8px',
+                                                borderRadius: '8px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                transition: 'all 0.2s'
+                                            }}
+                                            title="List View"
+                                        >
+                                            <ListIcon size={18} />
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '20px' }}>
+                                <div
+                                    className={viewMode === 'grid' ? 'grid' : 'list-view'}
+                                    style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: viewMode === 'grid' ? 'repeat(auto-fill, minmax(220px, 1fr))' : '1fr',
+                                        gap: '25px',
+                                        marginBottom: '60px'
+                                    }}
+                                >
                                     {products.map(product => (
-                                        <ProductCard key={product.uid} product={product} />
+                                        <ProductCard key={product.uid} product={product} viewMode={viewMode} />
                                     ))}
                                 </div>
+
+                                {/* Pagination UI */}
+                                {totalPages > 1 && (
+                                    <div className="pagination" style={{
+                                        display: 'flex',
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                        gap: '10px',
+                                        padding: '40px 0',
+                                        borderTop: '1px solid #eee'
+                                    }}>
+                                        <button
+                                            disabled={currentPage === 1}
+                                            onClick={() => handlePageChange(currentPage - 1)}
+                                            style={{
+                                                padding: '8px 16px',
+                                                borderRadius: '30px',
+                                                border: '1px solid #ddd',
+                                                background: '#fff',
+                                                cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                                                opacity: currentPage === 1 ? 0.5 : 1,
+                                                fontSize: '0.9rem',
+                                                fontWeight: 600
+                                            }}
+                                        >
+                                            Previous
+                                        </button>
+
+                                        <div style={{ display: 'flex', gap: '5px' }}>
+                                            {[...Array(totalPages)].map((_, i) => {
+                                                const pageNum = i + 1;
+                                                // Show first, last, current, and pages around current
+                                                if (
+                                                    pageNum === 1 ||
+                                                    pageNum === totalPages ||
+                                                    (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                                                ) {
+                                                    return (
+                                                        <button
+                                                            key={pageNum}
+                                                            onClick={() => handlePageChange(pageNum)}
+                                                            style={{
+                                                                width: '40px',
+                                                                height: '40px',
+                                                                borderRadius: '50%',
+                                                                border: '1px solid',
+                                                                borderColor: currentPage === pageNum ? 'var(--primary-color)' : '#ddd',
+                                                                background: currentPage === pageNum ? 'var(--primary-color)' : '#fff',
+                                                                color: currentPage === pageNum ? '#fff' : '#333',
+                                                                cursor: 'pointer',
+                                                                fontWeight: 600,
+                                                                transition: 'all 0.2s'
+                                                            }}
+                                                        >
+                                                            {pageNum}
+                                                        </button>
+                                                    );
+                                                } else if (
+                                                    pageNum === currentPage - 2 ||
+                                                    pageNum === currentPage + 2
+                                                ) {
+                                                    return <span key={pageNum} style={{ alignSelf: 'center', color: '#999' }}>...</span>;
+                                                }
+                                                return null;
+                                            })}
+                                        </div>
+
+                                        <button
+                                            disabled={currentPage === totalPages}
+                                            onClick={() => handlePageChange(currentPage + 1)}
+                                            style={{
+                                                padding: '8px 16px',
+                                                borderRadius: '30px',
+                                                border: '1px solid #ddd',
+                                                background: '#fff',
+                                                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                                                opacity: currentPage === totalPages ? 0.5 : 1,
+                                                fontSize: '0.9rem',
+                                                fontWeight: 600
+                                            }}
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                )}
                             </>
                         )}
                     </div>

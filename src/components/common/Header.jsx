@@ -3,10 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useLazyQuery } from '@apollo/client';
 import { GET_CATEGORY_TREE, GET_STORE_CONFIG, GET_PRODUCTS } from '../../api/products';
 import { useCart } from '../../contexts/CartContext';
-import { Menu, ChevronDown } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { Menu, ChevronDown, Search, User, ShoppingCart, Heart } from 'lucide-react';
+import { useWishlist } from '../../contexts/WishlistContext';
 
 const Header = () => {
     const { cartItems } = useCart();
+    const { items: wishlistItems } = useWishlist();
+    const { user } = useAuth();
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -22,7 +26,7 @@ const Header = () => {
     // Debounce Search
     useEffect(() => {
         const timeoutId = setTimeout(() => {
-            if (searchTerm.length >= 3) {
+            if (searchTerm.length >= 1) {
                 fetchSuggestions({ variables: { search: searchTerm, pageSize: 5 } });
                 setShowSuggestions(true);
             } else {
@@ -103,27 +107,30 @@ const Header = () => {
                                 placeholder="Search entire store here..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                onFocus={() => searchTerm.length >= 3 && setShowSuggestions(true)}
+                                onFocus={() => searchTerm.length >= 1 && setShowSuggestions(true)}
                                 style={{
                                     width: '100%',
-                                    padding: '12px 20px',
+                                    padding: '12px 25px',
                                     borderRadius: '30px',
                                     border: '1px solid #ddd',
                                     outline: 'none',
-                                    background: '#f9f9f9'
+                                    background: '#fff',
+                                    fontSize: '0.9rem'
                                 }}
                             />
                             <button type="submit" style={{
                                 position: 'absolute',
-                                right: '5px',
+                                right: '15px',
                                 top: '50%',
                                 transform: 'translateY(-50%)',
                                 background: 'none',
                                 border: 'none',
-                                color: '#666',
-                                cursor: 'pointer'
+                                color: '#333',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center'
                             }}>
-                                🔍
+                                <Search size={20} />
                             </button>
                         </form>
 
@@ -214,10 +221,63 @@ const Header = () => {
                     </div>
 
                     {/* Icons */}
-                    <div className="header-icons flex items-center gap-4">
-                        <Link to="/cart" className="flex items-center gap-2" style={{ fontWeight: 600 }}>
-                            <span style={{ fontSize: '1.2rem' }}>🛒</span>
-                            <span>{cartCount}</span>
+                    <div className="header-icons flex items-center" style={{ gap: '40px' }}>
+                        <Link to={user ? "/account" : "/login"} style={{ color: '#333', display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }} title={user ? "My Account" : "Sign In"}>
+                            <User size={24} strokeWidth={1.5} />
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontSize: '10px', textTransform: 'uppercase', color: '#888', fontWeight: '700', lineHeight: 1 }}>{user ? 'Welcome' : 'Guest'}</span>
+                                <span style={{ fontSize: '13px', fontWeight: '700' }}>{user ? user.firstname : 'Sign In'}</span>
+                            </div>
+                        </Link>
+
+                        <Link to="/wishlist" className="flex items-center" style={{ position: 'relative', color: '#333' }} title="Wishlist">
+                            <Heart size={24} strokeWidth={1.5} />
+                            {wishlistItems.length > 0 && (
+                                <span style={{
+                                    position: 'absolute',
+                                    top: '-8px',
+                                    right: '-8px',
+                                    background: '#ff4d4d',
+                                    color: 'white',
+                                    fontSize: '10px',
+                                    fontWeight: 'bold',
+                                    minWidth: '18px',
+                                    height: '18px',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '0 4px',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                    {wishlistItems.length}
+                                </span>
+                            )}
+                        </Link>
+
+                        <Link to="/cart" className="flex items-center" style={{ position: 'relative', color: '#333' }} title="Cart">
+                            <ShoppingCart size={24} strokeWidth={1.5} />
+                            {cartCount > 0 && (
+                                <span style={{
+                                    position: 'absolute',
+                                    top: '-8px',
+                                    right: '-8px',
+                                    background: '#00cc66',
+                                    color: 'white',
+                                    fontSize: '10px',
+                                    fontWeight: 'bold',
+                                    minWidth: '18px',
+                                    height: '18px',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '0 4px',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                    {cartCount}
+                                </span>
+                            )}
                         </Link>
                     </div>
                 </div>
@@ -233,9 +293,7 @@ const Header = () => {
                                 <Link to="/">Home</Link>
                             </li>
 
-                            {catLoading ? (
-                                <li className="menu-item" style={{ color: '#999' }}>Loading...</li>
-                            ) : (
+                            {catLoading ? null : (
                                 visibleCategories.map(category => (
                                     <li key={category.uid} className="menu-item">
                                         <Link to={`/category/${category.uid}`}>
@@ -270,7 +328,7 @@ const Header = () => {
 
                             {/* Static Links to match screenshot if not in query */}
                             <li className="menu-item">
-                                <Link to="#">Blog</Link>
+                                <Link to="/blog">Blog</Link>
                             </li>
 
                             {/* Static Deal Link */}

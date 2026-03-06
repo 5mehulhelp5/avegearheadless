@@ -3,8 +3,11 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@apollo/client';
 import { GET_PRODUCT_DETAIL } from '../api/products';
 import { useCart } from '../contexts/CartContext';
+import { useWishlist } from '../contexts/WishlistContext';
 import { getSalableQty } from '../api/stock';
 import Brands from '../components/home/Brands';
+import { useBreadcrumbs } from '../contexts/BreadcrumbContext';
+import SEO from '../components/common/SEO';
 import {
     Truck, ShieldCheck, RefreshCw,
     Heart, BarChart2, Mail,
@@ -16,11 +19,43 @@ import {
 const Product = () => {
     const { sku } = useParams();
     const { addToCart, cartItems, loading: cartLoading } = useCart();
+    const { isInWishlist, addToWishlist, removeFromWishlist, getWishlistItemId, loading: wishlistLoading } = useWishlist();
+    const { setBreadcrumbs } = useBreadcrumbs();
 
     // 1. All Hooks MUST be at the top level, before any returns
     const { loading, error, data } = useQuery(GET_PRODUCT_DETAIL, {
         variables: { sku }
     });
+
+    const product = data?.products?.items?.[0];
+
+    // Update breadcrumbs when product data is loaded
+    useEffect(() => {
+        if (product) {
+            const crumbs = [];
+
+            // Add category if available
+            if (product.categories && product.categories.length > 0) {
+                // Find the deepest or first non-root category
+                // For now, take the first one available
+                const category = product.categories[0];
+
+                // Add parent categories from breadcrumbs
+                if (category.breadcrumbs) {
+                    category.breadcrumbs.forEach(b => {
+                        crumbs.push({ label: b.category_name, path: `/category/${b.category_uid}` });
+                    });
+                }
+
+                crumbs.push({ label: category.name, path: `/category/${category.uid}` });
+            }
+
+            crumbs.push({ label: product.name, path: `/product/${sku}` });
+
+            setBreadcrumbs(crumbs);
+        }
+        return () => setBreadcrumbs([]);
+    }, [product, sku, setBreadcrumbs]);
 
     const [quantity, setQuantity] = useState(1);
     const [maxQty, setMaxQty] = useState(null);
@@ -29,7 +64,6 @@ const Product = () => {
     const [selectedOptions, setSelectedOptions] = useState({});
 
     // 2. Data Processing
-    const product = data?.products?.items?.[0];
 
     // Identify active variant based on selected options
     const getActiveSku = () => {
@@ -44,6 +78,18 @@ const Product = () => {
     };
 
     const activeSku = getActiveSku();
+    const inWishlist = isInWishlist(activeSku);
+    const wishlistItemId = getWishlistItemId(activeSku);
+    const isProcessing = cartLoading || wishlistLoading;
+
+    const handleWishlistToggle = async (e) => {
+        e.preventDefault();
+        if (inWishlist) {
+            await removeFromWishlist(wishlistItemId);
+        } else {
+            await addToWishlist(activeSku);
+        }
+    };
 
     // Load salable quantity from Magento inventory
     useEffect(() => {
@@ -185,13 +231,32 @@ const Product = () => {
         console.log('DEBUG package_contents.html:', product?.package_contents?.html);
     }
 
+    // Structured Data for Product
+    const structuredData = {
+        '@context': 'https://schema.org/',
+        '@type': 'Product',
+        'name': product.name,
+        'image': images.map(img => img.url),
+        'description': stripHtml(product.description?.html),
+        'sku': product.sku,
+        'offers': {
+            '@type': 'Offer',
+            'url': window.location.href,
+            'priceCurrency': finalPrice.currency,
+            'price': finalPrice.value,
+            'availability': outOfStock ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStock'
+        }
+    };
+
     return (
         <div style={{ backgroundColor: '#fff' }}>
-            {/* Breadcrumbs */}
-            <div className="container" style={{ padding: '20px 0', fontSize: '0.85rem', color: '#888' }}>
-                <Link to="/">Home</Link> &gt; <span>{product.name}</span>
-            </div>
-
+            <SEO
+                title={product.meta_title || product.name}
+                description={product.meta_description || stripHtml(product.description?.html).substring(0, 160)}
+                ogType="product"
+                ogImage={mainImage}
+                structuredData={structuredData}
+            />
             <div className="container" style={{ paddingBottom: '80px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)', gap: '60px', marginBottom: '80px' }}>
 
@@ -221,7 +286,7 @@ const Product = () => {
                                         opacity: mainImage === img.url ? 1 : 0.7
                                     }}
                                 >
-                                    <img src={img.url} alt={img.label} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                    <img src={img.url} alt={img.label} style={{ width: '100%', height: '100%', objectFit: 'contain' }} loading="lazy" />
                                 </div>
                             ))}
                         </div>
@@ -340,7 +405,24 @@ const Product = () => {
 
                             {/* Utility Icons */}
                             <div style={{ display: 'flex', gap: '15px', color: '#888' }}>
-                                <div style={{ padding: '10px', border: '1px solid #eee', borderRadius: '50%', cursor: 'pointer' }}><Heart size={20} /></div>
+                                <div
+                                    onClick={handleWishlistToggle}
+                                    style={{
+                                        padding: '10px',
+                                        border: `1px solid ${inWishlist ? '#ff4d4d' : '#eee'}`,
+                                        borderRadius: '50%',
+                                        cursor: 'pointer',
+                                        color: inWishlist ? '#ff4d4d' : '#888',
+                                        background: inWishlist ? '#fff0f0' : 'transparent',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'all 0.2s'
+                                    }}
+                                    title={inWishlist ? "Remove from wishlist" : "Add to wishlist"}
+                                >
+                                    <Heart size={20} fill={inWishlist ? "#ff4d4d" : "none"} strokeWidth={inWishlist ? 0 : 2} />
+                                </div>
                                 <div style={{ padding: '10px', border: '1px solid #eee', borderRadius: '50%', cursor: 'pointer' }}><BarChart2 size={20} /></div>
                                 <div style={{ padding: '10px', border: '1px solid #eee', borderRadius: '50%', cursor: 'pointer' }}><Mail size={20} /></div>
                             </div>

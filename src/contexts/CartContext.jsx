@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-
 import { gql, useMutation, useQuery } from '@apollo/client';
 import { getSalableQty } from '../api/stock';
 import LoadingOverlay from '../components/common/LoadingOverlay';
+import { useAuth } from './AuthContext';
 
 const CartContext = createContext();
 
@@ -15,9 +15,26 @@ const CREATE_CART = gql`
     }
 `;
 
+const GET_CUSTOMER_CART = gql`
+    query GetCustomerCart {
+        customerCart {
+            id
+        }
+    }
+`;
+
+const MERGE_CARTS = gql`
+    mutation MergeCarts($sourceId: String!, $destId: String!) {
+        mergeCarts(source_cart_id: $sourceId, destination_cart_id: $destId) {
+            id
+        }
+    }
+`;
+
 const GET_CART = gql`
     query GetCart($cartId: String!) {
         cart(cart_id: $cartId) {
+            id
             items {
                 uid
                 quantity
@@ -80,9 +97,9 @@ const REMOVE_FROM_CART = gql`
 `;
 
 export const CartProvider = ({ children }) => {
+    const { user } = useAuth();
     const [cartId, setCartId] = useState(() => {
         const saved = localStorage.getItem('cart_id');
-        // Guard against literal "undefined" string often caused by bad saves
         return (saved && saved !== 'undefined') ? saved : null;
     });
     const [cartItems, setCartItems] = useState([]);
@@ -92,13 +109,47 @@ export const CartProvider = ({ children }) => {
     const [createCartMutation] = useMutation(CREATE_CART);
     const [addToCartMutation] = useMutation(ADD_TO_CART);
     const [removeItemMutation] = useMutation(REMOVE_FROM_CART);
+    const [mergeCartsMutation] = useMutation(MERGE_CARTS);
+
+    // Fetch customer cart ID if logged in
+    const { data: customerCartData } = useQuery(GET_CUSTOMER_CART, {
+        skip: !user,
+        fetchPolicy: 'network-only'
+    });
 
     // Fetch cart data
     const { data: cartData, refetch: refetchCart } = useQuery(GET_CART, {
         variables: { cartId: (cartId && cartId !== 'undefined') ? cartId : '' },
         skip: !cartId || cartId === 'undefined',
-        notifyOnNetworkStatusChange: true, // Important for showing loading states
+        notifyOnNetworkStatusChange: true,
     });
+
+    // Handle Login: Switch to customer cart and merge if needed
+    useEffect(() => {
+        const handleLogin = async () => {
+            if (user && customerCartData?.customerCart?.id) {
+                const customerCartId = customerCartData.customerCart.id;
+
+                // If we have a guest cart with items, merge it
+                if (cartId && cartId !== customerCartId && cartItems.length > 0) {
+                    try {
+                        console.log(`Merging guest cart ${cartId} into customer cart ${customerCartId}`);
+                        await mergeCartsMutation({
+                            variables: { sourceId: cartId, destId: customerCartId }
+                        });
+                    } catch (err) {
+                        console.error("Failed to merge carts:", err);
+                    }
+                }
+
+                if (cartId !== customerCartId) {
+                    setCartId(customerCartId);
+                    localStorage.setItem('cart_id', customerCartId);
+                }
+            }
+        };
+        handleLogin();
+    }, [user, customerCartData, cartId, cartItems.length, mergeCartsMutation]);
 
     // Update cartItems whenever cartData changes
     useEffect(() => {
@@ -109,32 +160,28 @@ export const CartProvider = ({ children }) => {
                 product: item.product,
                 quantity: item.quantity
             })));
-        } else if (cartData?.cart === null && cartId && !loading) {
-            // Only clear cart ID if we are sure it's invalid and not just loading
-            // Prevent silent "cart empty" bug during transient errors
-            console.warn('Cart ID might be invalid on server. checking...');
         }
-    }, [cartData, cartId, loading]);
+    }, [cartData]);
 
-    // Initial Cart Creation
+    // Initial Cart Creation (for guests or if customer cart missing)
     useEffect(() => {
         const initCart = async () => {
-            if (!cartId || cartId === 'undefined') {
+            if (!user && (!cartId || cartId === 'undefined')) {
                 try {
                     const res = await createCartMutation();
                     const id = res.data.createEmptyCart;
-                    console.log('New Cart Created:', id);
+                    console.log('New Guest Cart Created:', id);
                     if (id) {
                         setCartId(id);
                         localStorage.setItem('cart_id', id);
                     }
                 } catch (err) {
-                    console.error("Failed to create cart", err);
+                    console.error("Failed to create guest cart", err);
                 }
             }
         };
         initCart();
-    }, [cartId, createCartMutation]);
+    }, [cartId, createCartMutation, user]);
 
     const addToCart = async (product, quantity = 1, selectedOptions = {}) => {
         console.log('addToCart called with:', { sku: product?.sku, qty: quantity, cartId, selectedOptions });
@@ -170,12 +217,9 @@ export const CartProvider = ({ children }) => {
             console.log(`[CartDebug] Adding ${validationSku}: request=${quantity}, current=${existingQty}, limit=${maxQty}`);
 
             if (maxQty !== null && maxQty !== undefined && (existingQty + quantity) > maxQty) {
-                // Exact message as requested by user
                 window.alert(`Only ${maxQty} item available in stock`);
                 setLoading(false);
                 return;
-            } else if (maxQty === null || maxQty === undefined) {
-                console.warn(`[CartDebug] No stock limit found for ${validationSku}. Proceeding with add.`);
             }
 
             // Prepare cart item input
@@ -200,30 +244,21 @@ export const CartProvider = ({ children }) => {
             }
 
             console.log('Sending addProductsToCart mutation with payload:', cartItemInput);
-            const result = await addToCartMutation({
+            await addToCartMutation({
                 variables: {
                     cartId,
                     cartItems: [cartItemInput]
                 }
             });
-            console.log('Mutation Result:', result);
 
             await refetchCart();
             setIsCartOpen(true);
         } catch (err) {
             console.error('Error adding to cart:', err);
             let errorMessage = 'Failed to add product to cart. Please try again.';
-
             if (err.graphQLErrors && err.graphQLErrors.length > 0) {
-                // If Magento returns a specific stock error, use its message
                 errorMessage = err.graphQLErrors[0].message;
-                err.graphQLErrors.forEach(({ message, path }) =>
-                    console.error(`[GraphQL error]: Message: ${message}, Path: ${path}`)
-                );
-            } else if (err.networkError) {
-                console.error(`[Network error]: ${err.networkError}`);
             }
-
             window.alert(errorMessage);
         } finally {
             setLoading(false);
@@ -243,9 +278,6 @@ export const CartProvider = ({ children }) => {
     };
 
     const clearCart = () => {
-        // Since we are using Magento Cart ID as master, 
-        // true "clear" would involve multiple remove mutations or creating a new cart.
-        // For simple demo, we just reset local state and cart ID.
         setCartId(null);
         localStorage.removeItem('cart_id');
         setCartItems([]);

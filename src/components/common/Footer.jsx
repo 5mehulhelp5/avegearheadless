@@ -4,7 +4,7 @@ import { Facebook, Twitter, Instagram, Youtube, Send } from 'lucide-react';
 
 const Footer = () => {
     return (
-        <footer style={{ backgroundColor: '#000', color: '#fff', paddingTop: '80px', paddingBottom: '40px' }}>
+        <footer style={{ backgroundColor: '#000', color: '#fff', paddingTop: '80px', paddingBottom: '40px', marginTop: '100px' }}>
             <div className="container">
                 {/* Logo and About */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1.5fr', gap: '40px', marginBottom: '60px' }}>
