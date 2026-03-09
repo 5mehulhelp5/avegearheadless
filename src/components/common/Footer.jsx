@@ -14,9 +14,9 @@ const Footer = () => {
 
                 const searchCriteria = '?searchCriteria[filter_groups][0][filters][0][field]=identifier&searchCriteria[filter_groups][0][filters][0][value]=headless-footer&searchCriteria[filter_groups][0][filters][0][condition_type]=eq';
                 
-                // Use the Vite proxy '/magento-api' to bypass CORS blocks on the Magento REST API
-                const proxyUrl = import.meta.env.DEV ? '' : (import.meta.env.VITE_MAGENTO_BASE_URL || 'https://2fc1869dd5.nxcli.io');
-                const endpoint = import.meta.env.DEV ? '/magento-api' : proxyUrl;
+                // Allow both Vite dev server and Vercel production rewrites to handle the REST path
+                // by consistently triggering the /magento-api/ prefix route.
+                const endpoint = '/magento-api';
 
                 const response = await fetch(`${endpoint}/rest/V1/cmsBlock/search${searchCriteria}`, {
                     method: 'GET',
