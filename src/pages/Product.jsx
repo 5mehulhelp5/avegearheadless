@@ -308,7 +308,7 @@ const Product = () => {
                         }}>
                             <img src={mainImage} alt={product.name} style={{ maxWidth: '100%', maxHeight: '500px', objectFit: 'contain' }} />
                         </div>
-                        <div style={{ display: 'flex', gap: '15px', overflowX: 'auto' }}>
+                        <div className="pdp-thumbnail-track" style={{ display: 'flex', gap: '15px', overflowX: 'auto' }}>
                             {images.map((img, idx) => (
                                 <div
                                     key={idx}

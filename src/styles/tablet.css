@@ -228,8 +228,11 @@
     }
 
     .home-page .hero-promo-grid {
-        grid-template-columns: repeat(2, 1fr) !important;
-        margin-top: 60px !important;
+        grid-template-columns: repeat(2, 1fr) !important; /* Two columns on tablet */
+        gap: 20px !important;
+        margin-top: 40px !important;
+        margin-bottom: 40px !important; /* Add space below slider */
+        padding: 0 20px;
     }
 
     /* Features Grid */

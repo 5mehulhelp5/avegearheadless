@@ -46,6 +46,7 @@
         scroll-snap-type: x mandatory;
         gap: 15px !important;
         padding: 0 20px 20px !important;
+        margin-bottom: 40px !important; /* Add space below slider */
     }
 
     .home-page .hero-product-card {
@@ -437,11 +438,26 @@
         grid-template-columns: 1fr !important;
         gap: 20px !important;
         margin-bottom: 40px !important;
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+
+    .pdp-gallery-section {
+        max-width: 100%;
+        overflow: hidden;
     }
 
     .pdp-main-image-container {
         padding: 5px !important;
         margin-bottom: 15px !important;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .pdp-thumbnail-track {
+        max-width: 100vw;
+        overflow-x: auto;
+        padding-bottom: 5px;
     }
 
     .pdp-title {
