@@ -100,7 +100,10 @@ export const CartProvider = ({ children }) => {
     const { user } = useAuth();
     const [cartId, setCartId] = useState(() => {
         const saved = localStorage.getItem('cart_id');
-        return (saved && saved !== 'undefined') ? saved : null;
+        if (saved && saved !== 'undefined' && saved !== 'null' && saved.trim() !== '') {
+            return saved;
+        }
+        return null;
     });
     const [cartItems, setCartItems] = useState([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
@@ -117,11 +120,31 @@ export const CartProvider = ({ children }) => {
         fetchPolicy: 'network-only'
     });
 
+    const isStaleCartError = (err) => {
+        const msg = (err?.message || err || "").toLowerCase();
+        return msg.includes('cannot perform operations on cart') || 
+               msg.includes('could not find a cart') ||
+               msg.includes("isn't active");
+    };
+
+    const clearCartAndRecover = () => {
+        console.warn('[CartContext] Clearing stale cart and preparing for recovery...');
+        localStorage.removeItem('cart_id');
+        setCartId(null);
+        setCartItems([]);
+    };
+
     // Fetch cart data
-    const { data: cartData, refetch: refetchCart } = useQuery(GET_CART, {
+    const { data: cartData, refetch: refetchCart, error: cartError } = useQuery(GET_CART, {
         variables: { cartId: (cartId && cartId !== 'undefined') ? cartId : '' },
         skip: !cartId || cartId === 'undefined',
         notifyOnNetworkStatusChange: true,
+        onError: (err) => {
+            console.error('[CartContext] GET_CART Error:', err);
+            if (isStaleCartError(err)) {
+                clearCartAndRecover();
+            }
+        }
     });
 
     // Handle Login: Switch to customer cart and merge if needed
@@ -143,6 +166,7 @@ export const CartProvider = ({ children }) => {
                 }
 
                 if (cartId !== customerCartId) {
+                    console.log(`[CartContext] Switching to customer cart: ${customerCartId}`);
                     setCartId(customerCartId);
                     localStorage.setItem('cart_id', customerCartId);
                 }
@@ -163,10 +187,10 @@ export const CartProvider = ({ children }) => {
         }
     }, [cartData]);
 
-    // Initial Cart Creation (for guests or if customer cart missing)
     useEffect(() => {
         const initCart = async () => {
-            if (!user && (!cartId || cartId === 'undefined')) {
+            const isValid = cartId && cartId !== 'undefined' && cartId !== 'null' && cartId.trim() !== '';
+            if (!user && !isValid) {
                 try {
                     const res = await createCartMutation();
                     const id = res.data.createEmptyCart;
@@ -256,9 +280,17 @@ export const CartProvider = ({ children }) => {
         } catch (err) {
             console.error('Error adding to cart:', err);
             let errorMessage = 'Failed to add product to cart. Please try again.';
+            
             if (err.graphQLErrors && err.graphQLErrors.length > 0) {
                 errorMessage = err.graphQLErrors[0].message;
+                
+                // Check for stale cart errors
+                if (isStaleCartError(errorMessage)) {
+                   clearCartAndRecover();
+                   errorMessage = 'Your cart session has expired. We have refreshed it, please try adding the item again.';
+                }
             }
+            
             window.alert(errorMessage);
         } finally {
             setLoading(false);

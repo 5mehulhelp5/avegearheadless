@@ -1,19 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@apollo/client';
-import { GET_PRODUCT_DETAIL } from '../api/products';
+import { GET_PRODUCT_DETAIL, GET_CMS_BLOCKS } from '../api/products';
 import { useCart } from '../contexts/CartContext';
 import { useWishlist } from '../contexts/WishlistContext';
 import { getSalableQty } from '../api/stock';
 import Brands from '../components/home/Brands';
 import { useBreadcrumbs } from '../contexts/BreadcrumbContext';
+import ProductReviews from '../components/catalog/ProductReviews';
+
 import SEO from '../components/common/SEO';
 import {
     Truck, ShieldCheck, RefreshCw,
     Heart, BarChart2, Mail,
     Facebook, Twitter, Instagram,
-    Bluetooth, Speaker, Gamepad2, Headphones,
-    Minus, Plus
+    Bluetooth, Volume2, Monitor, Headphones,
+    Minus, Plus, FileText, Package, Star, Check
 } from 'lucide-react';
 
 const Product = () => {
@@ -26,6 +28,12 @@ const Product = () => {
     const { loading, error, data } = useQuery(GET_PRODUCT_DETAIL, {
         variables: { sku }
     });
+
+    const { data: cmsData } = useQuery(GET_CMS_BLOCKS, {
+        variables: { identifiers: ['key-features-block'] }
+    });
+
+    const keyFeaturesBlock = cmsData?.cmsBlocks?.items?.[0];
 
     const product = data?.products?.items?.[0];
 
@@ -47,7 +55,7 @@ const Product = () => {
                     });
                 }
 
-                crumbs.push({ label: category.name, path: `/category/${category.uid}` });
+                crumbs.push({ label: category.name, path: `/${category.url_key}.html` });
             }
 
             crumbs.push({ label: product.name, path: `/product/${sku}` });
@@ -177,9 +185,17 @@ const Product = () => {
     const cartItem = cartItems?.find(item => item.product.sku === activeSku);
     const inCartQty = cartItem ? cartItem.quantity : 0;
 
-    const images = (product.media_gallery && product.media_gallery.length > 0)
-        ? product.media_gallery
-        : [{ url: 'https://placehold.co/600x600?text=No+Image', label: 'No Image' }];
+    const getUniqueImages = (gallery) => {
+        if (!gallery || gallery.length === 0) return [{ url: 'https://placehold.co/600x600?text=No+Image', label: 'No Image' }];
+        const seen = new Set();
+        return gallery.filter(img => {
+            if (seen.has(img.url)) return false;
+            seen.add(img.url);
+            return true;
+        });
+    };
+
+    const images = getUniqueImages(product.media_gallery);
 
     const regularPrice = product.price_range.minimum_price.regular_price;
     const finalPrice = product.price_range.minimum_price.final_price;
@@ -204,24 +220,26 @@ const Product = () => {
     const isAtLimit = maxQty !== null && inCartQty >= maxQty;
     const outOfStock = maxQty === 0;
 
+    const decodeHtml = (html) => {
+        if (!html) return '';
+        if (typeof window !== 'undefined') {
+            const txt = document.createElement('textarea');
+            txt.innerHTML = html;
+            const decoded = txt.value;
+            // If it was double encoded, try one more time
+            if (decoded.includes('&amp;') || decoded.includes('&lt;')) {
+                txt.innerHTML = decoded;
+                return txt.value;
+            }
+            return decoded;
+        }
+        return html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    };
+
     const stripHtml = (html) => {
         if (!html) return '';
-        // In browser: first decode any escaped entities (e.g. &lt;h2&gt;),
-        // then parse the decoded HTML to remove tags.
-        if (typeof window !== 'undefined' && typeof DOMParser !== 'undefined') {
-            const decodeDiv = document.createElement('div');
-            decodeDiv.innerHTML = html;
-            const decoded = decodeDiv.textContent || decodeDiv.innerText || '';
-
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(decoded, 'text/html');
-            const text = doc.body.textContent || doc.body.innerText || '';
-            return text.replace(/\s+\n/g, '\n').trim();
-        }
-
-        // Fallback: decode simple entities and strip tags using regex
-        const decodedFallback = html.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-        return decodedFallback.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        const decoded = decodeHtml(html);
+        return decoded.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
     };
 
     // Debug: log raw HTML and stripped output to browser console
@@ -246,6 +264,24 @@ const Product = () => {
             'price': finalPrice.value,
             'availability': outOfStock ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStock'
         }
+    };
+
+    // Render stars from a 0-100 rating
+    const renderSummaryStars = (ratingValue) => {
+        const normalizedRating = (ratingValue || 0) / 20; // 0-100 to 0-5
+        
+        return (
+            <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                {[1, 2, 3, 4, 5].map(star => (
+                    <Star 
+                        key={star} 
+                        size={16} 
+                        fill={star <= normalizedRating ? '#f39c12' : 'none'} 
+                        color={star <= normalizedRating ? '#f39c12' : '#ccc'} 
+                    />
+                ))}
+            </div>
+        );
     };
 
     return (
@@ -298,8 +334,31 @@ const Product = () => {
                             {product.name}
                         </h1>
 
-                        <div style={{ display: 'flex', gap: '20px', fontSize: '0.85rem', color: 'var(--primary-color)', marginBottom: '20px' }}>
-                            <span style={{ cursor: 'pointer' }}>Be the first to review this product</span>
+                        <div style={{ display: 'flex', gap: '20px', fontSize: '0.85rem', color: 'var(--primary-color)', marginBottom: '20px', alignItems: 'center' }}>
+                            {product.review_count > 0 ? (
+                                <>
+                                    {renderSummaryStars(product.rating_summary)}
+                                    <span 
+                                        style={{ cursor: 'pointer', color: '#666', textDecoration: 'underline' }}
+                                        onClick={() => {
+                                            setActiveTab('reviews');
+                                            document.getElementById('details').scrollIntoView({ behavior: 'smooth' });
+                                        }}
+                                    >
+                                        {product.review_count} {product.review_count === 1 ? 'Review' : 'Reviews'}
+                                    </span>
+                                </>
+                            ) : (
+                                <span 
+                                    style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                    onClick={() => {
+                                        setActiveTab('reviews');
+                                        document.getElementById('details').scrollIntoView({ behavior: 'smooth' });
+                                    }}
+                                >
+                                    Be the first to review this product
+                                </span>
+                            )}
                         </div>
 
                         <div style={{ fontSize: '0.9rem', color: '#d32f2f', marginBottom: '5px' }}>
@@ -461,70 +520,86 @@ const Product = () => {
                 </div>
 
                 {/* Tabs Section */}
-                <div id="details" style={{ border: '1px solid #eee', borderRadius: '12px', padding: '0', marginBottom: '60px', overflow: 'hidden' }}>
-                    <div style={{ display: 'flex', background: '#f5f5f5', borderBottom: '1px solid #eee' }}>
-                        {['Details', 'Package Contents', 'Reviews'].map(tab => (
+                <div id="details" className="pdp-tabs-container" style={{ marginBottom: '60px' }}>
+                    <div style={{ display: 'flex', gap: '5px', marginBottom: '0' }}>
+                        {[
+                            { name: 'Details', icon: FileText },
+                            { name: 'Package Contents', icon: Package },
+                            { name: 'Reviews', icon: Star }
+                        ].map(tab => (
                             <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab.toLowerCase())}
+                                key={tab.name}
+                                onClick={() => setActiveTab(tab.name.toLowerCase())}
+                                className={`pdp-tab-btn ${activeTab === tab.name.toLowerCase() ? 'active' : ''}`}
                                 style={{
-                                    padding: '15px 30px',
-                                    background: activeTab === tab.toLowerCase() ? 'white' : 'transparent',
-                                    border: 'none',
-                                    borderRight: '1px solid #eee',
-                                    borderTop: activeTab === tab.toLowerCase() ? '2px solid var(--primary-color)' : '2px solid transparent',
-                                    fontWeight: '600',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '12px 25px',
+                                    border: '1px solid #e0e0e0',
+                                    borderBottom: activeTab === tab.name.toLowerCase() ? '1px solid #fff' : '1px solid #e0e0e0',
+                                    background: activeTab === tab.name.toLowerCase() ? '#fff' : '#f8f8f8',
                                     cursor: 'pointer',
-                                    color: activeTab === tab.toLowerCase() ? '#333' : '#666'
+                                    fontSize: '14px',
+                                    fontWeight: '600',
+                                    color: activeTab === tab.name.toLowerCase() ? 'var(--primary-color)' : '#666',
+                                    borderRadius: '6px 6px 0 0',
+                                    position: 'relative',
+                                    zIndex: activeTab === tab.name.toLowerCase() ? 2 : 1,
+                                    marginBottom: '-1px'
                                 }}
                             >
-                                {tab}
+                                <tab.icon size={16} />
+                                {tab.name}
                             </button>
                         ))}
                     </div>
-                    <div style={{ padding: '40px' }}>
+                    <div className="pdp-tab-content" style={{ 
+                        padding: '40px', 
+                        border: '1px solid #e0e0e0', 
+                        borderRadius: '0 6px 6px 6px',
+                        background: '#fff'
+                    }}>
                         {activeTab === 'details' && (
-                            <div>
-                                <h3 style={{ marginTop: 0 }}>Features</h3>
-                                <div>{stripHtml(product.description.html)}</div>
+                            <div className="pdp-details-wrapper">
+                                <h3 style={{ marginTop: 0, textTransform: 'uppercase', fontSize: '16px', color: '#333', marginBottom: '20px' }}>Features</h3>
+                                <div className="pdp-details-content" dangerouslySetInnerHTML={{ __html: decodeHtml(product.description.html) }} />
                             </div>
                         )}
                         {activeTab === 'package contents' && (
                             product.package_contents && product.package_contents.html
-                                ? <div>{stripHtml(product.package_contents.html)}</div>
+                                ? <div dangerouslySetInnerHTML={{ __html: decodeHtml(product.package_contents.html) }} />
                                 : <div>Package contents not available.</div>
                         )}
-                        {activeTab === 'reviews' && <div>No reviews yet.</div>}
+                        {activeTab === 'reviews' && (
+                            <ProductReviews sku={product.sku} />
+                        )}
                     </div>
                 </div>
 
-                {/* Key Features Icons */}
-                <div style={{ marginBottom: '80px' }}>
-                    <h3 style={{ fontSize: '1.8rem', fontWeight: '300', marginBottom: '40px', color: '#666' }}>Key Features</h3>
-                    <div style={{ display: 'flex', gap: '20px', justifyContent: 'space-between' }}>
-                        {[
-                            { icon: Bluetooth, label: 'Bluetooth 5.0', desc: 'Immersive clarity on the go' },
-                            { icon: Speaker, label: 'Home Audio', desc: 'Upgrade your living space' },
-                            { icon: Gamepad2, label: 'Gaming Products', desc: 'Set the stage for perfect gaming' },
-                            { icon: Headphones, label: 'Car & Marine Audio', desc: 'Ensure your music feels dynamic' },
-                        ].map((item, idx) => (
-                            <div key={idx} style={{
-                                flex: 1,
-                                background: 'white',
-                                padding: '30px',
-                                borderRadius: '12px',
-                                boxShadow: '0 5px 20px rgba(0,0,0,0.05)',
-                                textAlign: 'center',
-                                border: '1px solid #f0f0f0'
-                            }}>
-                                <div style={{ background: '#f5f5f5', padding: '15px', borderRadius: '50%', display: 'inline-block', marginBottom: '15px' }}>
-                                    <item.icon size={24} color="#333" />
+                {/* Key Features Section */}
+                <div className="key-features-section" style={{ marginBottom: '80px' }}>
+                    <h3>Key Features</h3>
+                    {keyFeaturesBlock ? (
+                        <div className="magento-cms-renderer" dangerouslySetInnerHTML={{ __html: decodeHtml(keyFeaturesBlock.content) }} />
+                    ) : (
+                        <div className="key-features-grid">
+                            {[
+                                { icon: Bluetooth, label: 'Bluetooth 5.0', desc: 'Immersive clarity on the go.' },
+                                { icon: Volume2, label: 'Home Audio', desc: 'Upgrade your living space.' },
+                                { icon: Monitor, label: 'Gaming Products', desc: 'Set the stage for the perfect gaming environment.' },
+                                { icon: Headphones, label: 'Car & Marine Audio', desc: 'Ensure your music feels dynamic.' },
+                            ].map((item, idx) => (
+                                <div key={idx} className="key-feature-card">
+                                    <div className="feature-icon-circle">
+                                        <item.icon size={30} color="#000" strokeWidth={1.5} />
+                                    </div>
+                                    <h4>{item.label}</h4>
+                                    <p>{item.desc}</p>
                                 </div>
-                                <h4 style={{ margin: '0 0 5px', color: '#d35400' }}>{item.label}</h4>
-                                <p style={{ fontSize: '0.8rem', color: '#888', margin: 0 }}>{item.desc}</p>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Brands */}

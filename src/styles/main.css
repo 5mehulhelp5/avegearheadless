@@ -91,18 +91,7 @@ button.primary:hover {
     background-position: 468px 0;
   }
 }
-
-.skeleton {
-  background: #f6f7f8;
-  background-image: linear-gradient(to right, #f6f7f8 0%, #edeef1 20%, #f6f7f8 40%, #f6f7f8 100%);
-  background-repeat: no-repeat;
-  background-size: 800px 104px;
-  display: inline-block;
-  position: relative;
-  animation: shimmer 1.2s linear infinite forwards;
-  border-radius: 4px;
-}
-
+/* Skeleton text loader */
 .skeleton-text {
   height: 1rem;
   width: 100%;
@@ -172,6 +161,9 @@ button.primary:hover {
   background: linear-gradient(90deg, #f0f0f0 25%, #f8f8f8 50%, #f0f0f0 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite linear;
+  display: inline-block;
+  position: relative;
+  border-radius: 4px;
 }
 
 @keyframes spin {
@@ -529,3 +521,136 @@ button.primary:hover {
   font-size: 0.75rem;
   margin-left: 10px;
 }
+
+/* Product Detail Page Redesign */
+.pdp-tab-btn:hover {
+  background: #fff !important;
+  color: var(--primary-color) !important;
+}
+
+.pdp-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--primary-color);
+  border-radius: 6px 6px 0 0;
+}
+
+.pdp-details-content ul, 
+.pdp-details-content ol {
+  padding-left: 0;
+  list-style: none;
+}
+
+.pdp-details-content li {
+  position: relative;
+  padding-left: 30px;
+  margin-bottom: 12px;
+  font-size: 0.95rem;
+  color: #444;
+}
+
+.pdp-details-content li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 18px;
+  height: 18px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2300a651' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.pdp-details-content h4, 
+.pdp-details-content h5 {
+  margin-top: 25px;
+  margin-bottom: 15px;
+  text-transform: uppercase;
+  font-size: 14px;
+  color: #333;
+}
+
+.key-features-section {
+  padding: 60px 0;
+  border-top: 1px solid #eee;
+}
+
+.key-features-section h3 {
+  font-size: 2rem;
+  font-weight: 300;
+  color: #333;
+  margin-bottom: 40px;
+}
+
+.key-features-grid, 
+.magento-cms-renderer .features-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 25px;
+}
+
+.key-feature-card, 
+.magento-cms-renderer .feature-card {
+  background: #fff;
+  padding: 40px 25px;
+  border-radius: 20px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.03);
+  text-align: center;
+  border: 1px solid #f8f8f8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform 0.3s ease;
+}
+
+.key-feature-card:hover, 
+.magento-cms-renderer .feature-card:hover {
+  transform: translateY(-5px);
+}
+
+.feature-icon-circle, 
+.magento-cms-renderer .icon-circle {
+  background: #f5f5f5;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 25px;
+}
+
+.key-feature-card h4, 
+.magento-cms-renderer .feature-card h4 {
+  margin: 0 0 10px;
+  color: #333;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.key-feature-card p, 
+.magento-cms-renderer .feature-card p {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 0;
+  line-height: 1.5;
+}
+
+@media (max-width: 992px) {
+  .key-features-grid, 
+  .magento-cms-renderer .features-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 576px) {
+  .key-features-grid, 
+  .magento-cms-renderer .features-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

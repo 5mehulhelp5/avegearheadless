@@ -1,16 +1,15 @@
 import React from 'react';
 import { useQuery } from '@apollo/client';
-import { GET_CATALOG_PRICE_RULES, GET_CART_PRICE_RULES } from '../../api/products';
+import { GET_PROMOTIONS } from '../../api/products';
 import { Tag } from 'lucide-react';
 
 const PromotionsBanner = () => {
-    const { loading: catalogLoading, error: catalogError, data: catalogData } = useQuery(GET_CATALOG_PRICE_RULES);
-    const { loading: cartLoading, error: cartError, data: cartData } = useQuery(GET_CART_PRICE_RULES);
+    const { loading, error, data } = useQuery(GET_PROMOTIONS);
 
-    if (catalogLoading || cartLoading) return null;
+    if (loading) return null;
 
-    const catalogRules = catalogData?.catalogPriceRules?.items || [];
-    const cartRules = cartData?.cartPriceRules?.items || [];
+    const catalogRules = data?.catalogPriceRules?.items || [];
+    const cartRules = data?.cartPriceRules?.items || [];
 
     const allRules = [...catalogRules, ...cartRules].filter(rule => rule.is_active);
 

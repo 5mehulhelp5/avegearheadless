@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useLazyQuery } from '@apollo/client';
-import { GET_CATEGORY_TREE, GET_STORE_CONFIG, GET_PRODUCTS } from '../../api/products';
+import { GET_INITIAL_DATA, GET_PRODUCTS } from '../../api/products';
+import OptimizedImage from '../common/OptimizedImage';
 import { useCart } from '../../contexts/CartContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Menu, ChevronDown, Search, User, ShoppingCart, Heart } from 'lucide-react';
@@ -18,8 +19,8 @@ const Header = () => {
     // Lazy query for suggestions
     const [fetchSuggestions, { data: searchData, loading: searchLoading }] = useLazyQuery(GET_PRODUCTS);
 
-    const { loading: catLoading, data: catData } = useQuery(GET_CATEGORY_TREE);
-    const { data: configData } = useQuery(GET_STORE_CONFIG);
+    // Consolidated query for initial data
+    const { loading: initLoading, data: initData } = useQuery(GET_INITIAL_DATA);
 
     const containerRef = useRef(null);
 
@@ -49,12 +50,12 @@ const Header = () => {
     }, []);
 
     const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
-    const categories = catData?.categoryList?.[0]?.children || [];
+    const categories = initData?.categoryList?.[0]?.children || [];
     const visibleCategories = categories.filter(cat => cat.include_in_menu === 1);
 
-    const logoSrc = configData?.storeConfig?.header_logo_src;
-    const mediaBase = configData?.storeConfig?.secure_base_media_url;
-    const logoAlt = configData?.storeConfig?.logo_alt || 'AV Gear';
+    const logoSrc = initData?.storeConfig?.header_logo_src;
+    const mediaBase = initData?.storeConfig?.secure_base_media_url;
+    const logoAlt = initData?.storeConfig?.logo_alt || 'AV Gear';
 
     const fullLogoUrl = logoSrc && mediaBase ?
         (logoSrc.startsWith('http') ? logoSrc : `${mediaBase}logo/${logoSrc}`)
@@ -85,7 +86,12 @@ const Header = () => {
                     {/* Logo */}
                     <Link to="/" className="logo" style={{ minWidth: '150px' }}>
                         {fullLogoUrl ? (
-                            <img src={fullLogoUrl} alt={logoAlt} style={{ maxHeight: '50px' }} />
+                            <OptimizedImage 
+                                src={fullLogoUrl} 
+                                alt={logoAlt} 
+                                style={{ maxHeight: '50px' }} 
+                                priority={true} 
+                            />
                         ) : (
                             <span style={{ fontSize: '1.8rem', fontWeight: '900', letterSpacing: '-1px' }}>AV<span style={{ color: 'var(--primary-color)' }}>GEAR</span></span>
                         )}
@@ -293,10 +299,10 @@ const Header = () => {
                                 <Link to="/">Home</Link>
                             </li>
 
-                            {catLoading ? null : (
+                            {initLoading ? null : (
                                 visibleCategories.map(category => (
                                     <li key={category.uid} className="menu-item">
-                                        <Link to={`/category/${category.uid}`}>
+                                        <Link to={`/${category.url_key}.html`}>
                                             {category.name}
                                             {category.children && category.children.length > 0 && (
                                                 <ChevronDown size={14} style={{ marginLeft: '5px', verticalAlign: 'middle', opacity: 0.7 }} />
@@ -308,12 +314,12 @@ const Header = () => {
                                             <ul className="sub-menu">
                                                 {category.children.map(child => (
                                                     <li key={child.uid}>
-                                                        <Link to={`/category/${child.uid}`}>{child.name}</Link>
+                                                        <Link to={`/${child.url_key}.html`}>{child.name}</Link>
                                                         {child.children && child.children.length > 0 && (
                                                             <ul className="sub-menu">
                                                                 {child.children.map(grandChild => (
                                                                     <li key={grandChild.uid}>
-                                                                        <Link to={`/category/${grandChild.uid}`}>{grandChild.name}</Link>
+                                                                        <Link to={`/${grandChild.url_key}.html`}>{grandChild.name}</Link>
                                                                     </li>
                                                                 ))}
                                                             </ul>

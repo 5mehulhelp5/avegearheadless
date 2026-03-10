@@ -8,35 +8,57 @@ const Footer = () => {
 
     useEffect(() => {
         const fetchFooterBlock = async () => {
-            try {
-                const token = await fetchAdminToken();
-                if (!token) throw new Error("Could not get admin token");
+            const magentoBaseUrl = import.meta.env.VITE_MAGENTO_BASE_URL || 'https://2fc1869dd5.nxcli.io';
+            const searchCriteria = '?searchCriteria[filter_groups][0][filters][0][field]=identifier&searchCriteria[filter_groups][0][filters][0][value]=headless-footer&searchCriteria[filter_groups][0][filters][0][condition_type]=eq';
 
-                const searchCriteria = '?searchCriteria[filter_groups][0][filters][0][field]=identifier&searchCriteria[filter_groups][0][filters][0][value]=headless-footer&searchCriteria[filter_groups][0][filters][0][condition_type]=eq';
-                
-                // Allow both Vite dev server and Vercel production rewrites to handle the REST path
-                // by consistently triggering the /magento-api/ prefix route.
-                const endpoint = '/magento-api';
+            const fetchWithEndpoint = async (apiPrefix) => {
+                try {
+                    const token = await fetchAdminToken();
+                    if (!token) throw new Error("Could not get admin token");
 
-                const response = await fetch(`${endpoint}/rest/V1/cmsBlock/search${searchCriteria}`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
+                    console.log(`[Footer] Attempting fetch with prefix: ${apiPrefix}`);
+                    const response = await fetch(`${apiPrefix}/rest/V1/cmsBlock/search${searchCriteria}`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`Status: ${response.status} - ${errorText}`);
                     }
-                });
-
-                if (!response.ok) throw new Error("Failed to fetch block");
-                
-                const data = await response.json();
-                if (data.items && data.items.length > 0) {
-                    setBlockContent(data.items[0].content);
+                    
+                    const data = await response.json();
+                    if (data.items && data.items.length > 0) {
+                        return data.items[0].content;
+                    }
+                    return null;
+                } catch (err) {
+                    console.warn(`[Footer] Fetch failed for ${apiPrefix}:`, err.message);
+                    return null;
                 }
-            } catch (err) {
-                console.error("Error fetching footer block:", err);
-            } finally {
-                setLoading(false);
+            };
+
+            setLoading(true);
+            
+            // 1. Try proxied endpoint (standard for Vite/Vercel)
+            let content = await fetchWithEndpoint('/magento-api');
+            
+            // 2. Fallback to absolute URL (supports direct staging access)
+            if (!content) {
+                console.log("[Footer] Proxied fetch failed, trying absolute URL...");
+                content = await fetchWithEndpoint(magentoBaseUrl);
             }
+
+            if (content) {
+                setBlockContent(content);
+            } else {
+                console.error("[Footer] All footer fetch attempts failed.");
+            }
+            
+            setLoading(false);
         };
 
         fetchFooterBlock();
@@ -84,7 +106,7 @@ const Footer = () => {
     })();
 
     return (
-        <footer style={{ backgroundColor: '#000', color: '#fff', margin: 0 }}>
+        <footer style={{ backgroundColor: '#000', color: '#fff', marginTop: '60px' }}>
             {/* Global CMS Footer */}
             {decodedContent ? (
                 <div 

@@ -46,38 +46,52 @@ export const fetchAdminToken = async () => {
 
   const username = import.meta.env.VITE_MAGENTO_ADMIN_USER;
   const password = import.meta.env.VITE_MAGENTO_ADMIN_PASS;
+  const magentoBaseUrl = import.meta.env.VITE_MAGENTO_BASE_URL || 'https://2fc1869dd5.nxcli.io';
 
   if (!username || !password) {
-    console.error("[TokenFetcher] Missing admin credentials in .env");
+    console.error("[TokenFetcher] Missing admin credentials in environment variables");
     return null;
   }
 
-  try {
-    console.log("[TokenFetcher] Requesting new Admin Session Token...");
-    const response = await fetch('/magento-api/rest/V1/integration/admin/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
+  const fetchToken = async (endpoint) => {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
 
-    if (!response.ok) {
-      console.error(`[TokenFetcher] Failed to fetch token. Status: ${response.status}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Status: ${response.status} - ${errorText}`);
+      }
+
+      return await response.json();
+    } catch (err) {
+      console.warn(`[TokenFetcher] Failed at ${endpoint}:`, err.message);
       return null;
     }
+  };
 
-    const token = await response.json();
+  // Try proxied endpoint first (standard for Vite/Vercel)
+  let token = await fetchToken('/magento-api/rest/V1/integration/admin/token');
+  
+  // Fallback to absolute URL if proxy fails (useful for direct staging access)
+  if (!token) {
+    console.log("[TokenFetcher] Proxied request failed. Falling back to absolute URL...");
+    token = await fetchToken(`${magentoBaseUrl}/rest/V1/integration/admin/token`);
+  }
 
+  if (token) {
     // Magento tokens usually expire in 4 hours. We'll cache for 3.5 hours to be safe.
     currentAdminToken = token;
     tokenExpirationTime = Date.now() + (3.5 * 60 * 60 * 1000);
-
-    console.log("[TokenFetcher] New token successfully retrieved and cached.");
+    console.log("[TokenFetcher] Token successfully retrieved and cached.");
     return token;
-
-  } catch (error) {
-    console.error("[TokenFetcher] Network error fetching token:", error);
-    return null;
   }
+
+  console.error("[TokenFetcher] All attempts to fetch Admin Token failed.");
+  return null;
 };
 
 export const getAdminHeaders = async () => {

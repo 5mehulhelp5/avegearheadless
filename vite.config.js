@@ -26,6 +26,20 @@ export default defineConfig(({ mode }) => {
           }
         }
       }
+    },
+    build: {
+      cssMinify: true,
+      minify: 'esbuild',
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-apollo': ['@apollo/client', 'graphql'],
+            'vendor-icons': ['lucide-react']
+          }
+        }
+      },
+      chunkSizeWarningLimit: 1000
     }
   }
 })

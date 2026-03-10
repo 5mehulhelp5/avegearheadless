@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@apollo/client';
 import { LayoutGrid, List as ListIcon } from 'lucide-react';
-import { GET_CATEGORY_PRODUCTS } from '../api/products';
+import { GET_CATEGORY_PRODUCTS, GET_CATEGORY_INFO } from '../api/products';
 import ProductCard from '../components/catalog/ProductCard';
 import { useBreadcrumbs } from '../contexts/BreadcrumbContext';
 import SEO from '../components/common/SEO';
 
 const Category = () => {
-    const { id } = useParams();
+    const { id, url_key } = useParams();
     const { setBreadcrumbs } = useBreadcrumbs();
     // Start with just the category filter
     const [activeFilters, setActiveFilters] = useState({});
@@ -24,45 +24,65 @@ const Category = () => {
 
     // Construct the full filter object for GraphQL
     const filterVariables = {
-        category_uid: { eq: id || "Mg==" },
         ...activeFilters
     };
 
-    const { loading, error, data } = useQuery(GET_CATEGORY_PRODUCTS, {
+    // 1. Resolve Category Info (slug -> uid)
+    const { loading: infoLoading, error: infoError, data: infoData } = useQuery(GET_CATEGORY_INFO, {
+        variables: { id, urlKey: url_key },
+        fetchPolicy: 'cache-first'
+    });
+
+    const category = infoData?.categoryList?.[0];
+    const categoryUid = category?.uid;
+    const categoryName = category?.name || 'Category';
+
+    // 2. Fetch Products once UID is available
+    const { loading: productsLoading, error: productsError, data: productsData } = useQuery(GET_CATEGORY_PRODUCTS, {
         variables: {
-            id: id || "Mg==",
-            filter: filterVariables,
+            filter: {
+                ...filterVariables,
+                category_uid: { eq: categoryUid }
+            },
             pageSize,
             currentPage,
             sort
         },
-        fetchPolicy: 'network-only' // Ensure we get fresh aggregations on filter change
+        skip: !categoryUid,
+        fetchPolicy: 'network-only'
     });
 
-    const categoryName = data?.categoryList?.[0]?.name || 'Category';
-    const totalCount = data?.products?.total_count || 0;
-    const totalPages = data?.products?.page_info?.total_pages || 1;
+    const products = productsData?.products?.items || [];
+    const aggregations = productsData?.products?.aggregations || [];
+    const totalCount = productsData?.products?.total_count || 0;
+    const totalPages = productsData?.products?.page_info?.total_pages || 1;
+
+    const loading = infoLoading || (productsLoading && !productsData);
+    const error = infoError || productsError;
 
     // Update breadcrumbs when category data is loaded
     useEffect(() => {
-        if (data && data.categoryList?.[0]) {
-            const category = data.categoryList[0];
+        if (category) {
             const crumbs = [];
 
             // Add parent categories from breadcrumbs
             if (category.breadcrumbs) {
                 category.breadcrumbs.forEach(b => {
+                    // We need url_key for parent breadcrumbs too if possible, 
+                    // but the breadcrumbs array usually only has IDs and names.
+                    // For now, use IDs or stay consistent. 
+                    // Actually, let's just use the name if we can't get the slug easily for parents.
                     crumbs.push({ label: b.category_name, path: `/category/${b.category_uid}` });
                 });
             }
 
             // Add current category
-            crumbs.push({ label: categoryName, path: `/category/${id}` });
+            crumbs.push({ label: categoryName, path: `/${category.url_key || url_key}.html` });
 
             setBreadcrumbs(crumbs);
         }
         return () => setBreadcrumbs([]);
-    }, [data, categoryName, id, setBreadcrumbs]);
+    }, [category, categoryName, url_key, setBreadcrumbs]);
 
     // Reset filters and page when changing category
     useEffect(() => {
@@ -103,7 +123,7 @@ const Category = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    if (loading && !data) return (
+    if (loading) return (
         <div className="category-page">
             <div className="header" style={{ backgroundColor: '#f5f5f5', padding: '40px 0', marginBottom: 'var(--spacing-lg)' }}>
                 <div className="container">
@@ -142,8 +162,7 @@ const Category = () => {
     );
     if (error) return <div className="container" style={{ padding: '40px 0' }}>Error: {error.message}</div>;
 
-    const products = data?.products?.items || [];
-    const aggregations = data?.products?.aggregations || [];
+    // products and aggregations are now extracted from category.products above
 
     // We filter out 'category_uid' aggregation usually as it's redundant here, 
     // but useful for subcategories. Let's keep distinct ones.
@@ -153,7 +172,7 @@ const Category = () => {
         <div className="category-page">
             <SEO
                 title={`${categoryName} | AV GEAR`}
-                description={data?.categoryList?.[0]?.meta_description || `Browse our collection of ${categoryName}.`}
+                description={category?.meta_description || `Browse our collection of ${categoryName}.`}
                 ogType="website"
             />
             <div className="header" style={{ backgroundColor: '#f5f5f5', padding: '40px 0', marginBottom: 'var(--spacing-lg)' }}>
@@ -178,7 +197,7 @@ const Category = () => {
                                 <div className="filter-item-list">
                                     <div className="filter-item selected">
                                         <span>{categoryName}</span>
-                                        <span className="count">({data?.products?.total_count || 0})</span>
+                                        <span className="count">({totalCount})</span>
                                     </div>
                                 </div>
                             )}

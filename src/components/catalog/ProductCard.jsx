@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useCart } from '../../contexts/CartContext';
 import { useWishlist } from '../../contexts/WishlistContext';
 import { Heart } from 'lucide-react';
+import OptimizedImage from '../common/OptimizedImage';
 
 const ProductCard = ({ product, viewMode = 'grid' }) => {
     const { addToCart, cartItems, loading: cartLoading } = useCart();
@@ -150,10 +151,11 @@ const ProductCard = ({ product, viewMode = 'grid' }) => {
                 <Link to={`/product/${sku}`} style={{ display: 'block' }}>
                     <div style={{ aspectRatio: '1/1', overflow: 'hidden', borderRadius: '12px', background: '#fff' }}>
                         {small_image?.url ? (
-                            <img
+                            <OptimizedImage
                                 src={small_image.url}
                                 alt={name}
                                 style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                loading="lazy"
                             />
                         ) : (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#f5f5f5', color: '#ccc' }}>No Image</div>

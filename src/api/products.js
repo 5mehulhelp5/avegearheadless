@@ -38,6 +38,8 @@ export const GET_PRODUCT_DETAIL = gql`
         name
         stock_status
         only_x_left_in_stock
+        review_count
+        rating_summary
         description {
           html
         }
@@ -95,7 +97,7 @@ export const GET_PRODUCT_DETAIL = gql`
 `;
 
 export const GET_CATEGORY_PRODUCTS = gql`
-  query GetCategoryProducts($id: String!, $pageSize: Int = 12, $currentPage: Int = 1, $filter: ProductAttributeFilterInput, $sort: ProductAttributeSortInput) {
+  query GetCategoryProducts($pageSize: Int = 12, $currentPage: Int = 1, $filter: ProductAttributeFilterInput, $sort: ProductAttributeSortInput) {
     products(filter: $filter, pageSize: $pageSize, currentPage: $currentPage, sort: $sort) {
       items {
         uid
@@ -138,9 +140,19 @@ export const GET_CATEGORY_PRODUCTS = gql`
         total_pages
       }
     }
-    categoryList(filters: { category_uid: { eq: $id } }) {
+  }
+`;
+
+export const GET_CATEGORY_INFO = gql`
+  query GetCategoryInfo($id: String, $urlKey: String) {
+    categoryList(filters: { category_uid: { eq: $id }, url_key: { eq: $urlKey } }) {
+        uid
         name
+        url_key
+        url_path
         description
+        meta_title
+        meta_description
         breadcrumbs {
             category_uid
             category_name
@@ -148,8 +160,12 @@ export const GET_CATEGORY_PRODUCTS = gql`
         }
         children {
             uid
+            name
+            url_key
             children {
                 uid
+                name
+                url_key
                 children {
                     uid
                 }
@@ -242,6 +258,112 @@ export const GET_CART_PRICE_RULES = gql`
         simple_action
         coupon_type
         stop_rules_processing
+      }
+    }
+  }
+`;
+
+export const GET_PROMOTIONS = gql`
+  query GetPromotions {
+    catalogPriceRules {
+      items {
+        rule_id
+        name
+        description
+        is_active
+        discount_amount
+        simple_action
+      }
+    }
+    cartPriceRules {
+      items {
+        rule_id
+        name
+        description
+        is_active
+        discount_amount
+        simple_action
+        coupon_type
+        stop_rules_processing
+      }
+    }
+  }
+`;
+
+// Consolidated query for initial store data and category tree
+export const GET_INITIAL_DATA = gql`
+  query GetInitialData {
+    storeConfig {
+      header_logo_src
+      secure_base_media_url
+      logo_alt
+    }
+    categoryList(filters: { ids: { eq: "2" } }) {
+      children {
+        uid
+        name
+        include_in_menu
+        url_key
+        url_path
+        children {
+          uid
+          name
+          url_key
+          url_path
+          include_in_menu
+        }
+      }
+    }
+  }
+`;
+
+// Consolidated query for Home page products (Featured and Trending)
+export const GET_HOME_DATA = gql`
+  query GetHomeData($featuredSize: Int = 4, $trendingSize: Int = 4, $trendingSearch: String = "audio") {
+    featuredProducts: products(search: "", pageSize: $featuredSize) {
+      items {
+        uid
+        sku
+        name
+        stock_status
+        price_range {
+          minimum_price {
+            regular_price {
+              value
+              currency
+            }
+            final_price {
+              value
+              currency
+            }
+          }
+        }
+        small_image {
+          url
+        }
+      }
+    }
+    trendingProducts: products(search: $trendingSearch, pageSize: $trendingSize) {
+      items {
+        uid
+        sku
+        name
+        stock_status
+        price_range {
+          minimum_price {
+            regular_price {
+              value
+              currency
+            }
+            final_price {
+              value
+              currency
+            }
+          }
+        }
+        small_image {
+          url
+        }
       }
     }
   }

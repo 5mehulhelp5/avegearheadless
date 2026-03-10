@@ -43,6 +43,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/category/:id" element={<Category />} />
+              <Route path="/:url_key.html" element={<Category />} />
               <Route path="/product/:sku" element={<Product />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/checkout" element={<Checkout />} />

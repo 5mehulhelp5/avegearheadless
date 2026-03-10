@@ -3,6 +3,7 @@ import { useQuery } from '@apollo/client';
 import { GET_PRODUCTS } from '../../api/products';
 import { useCart } from '../../contexts/CartContext';
 import ProductSkeleton from '../catalog/ProductSkeleton';
+import OptimizedImage from '../common/OptimizedImage';
 
 const Hero = () => {
     const { addToCart } = useCart();
@@ -37,7 +38,7 @@ const Hero = () => {
                 backgroundSize: 'cover',
                 backgroundPosition: 'center top',
                 zIndex: 0
-            }}></div>
+            }} role="img" aria-label="Hero Background"></div>
 
             <div className="container" style={{ position: 'relative', zIndex: 2, textAlign: 'center', width: '100%', paddingTop: '100px' }}>
                 <h1 style={{
@@ -79,10 +80,11 @@ const Hero = () => {
                         }}>
                             <div style={{ height: '90px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px' }}>
                                 {product.small_image?.url ? (
-                                    <img
+                                    <OptimizedImage
                                         src={product.small_image.url}
                                         alt={product.name}
                                         style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                                        priority={true} // Hero section products are above the fold
                                     />
                                 ) : (
                                     <div style={{ width: '100%', height: '100%', background: '#eee' }}></div>
